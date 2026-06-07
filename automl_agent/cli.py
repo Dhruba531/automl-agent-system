@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from automl_agent.orchestrator import AutoMLOrchestrator
+from automl_agent.registry import ModelRegistry
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,6 +22,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--output", type=Path, default=Path("artifacts/run"), help="Artifact output directory.")
     run.add_argument("--workers", type=int, default=4, help="Parallel candidate training workers.")
     run.add_argument("--trials", type=int, default=20, help="Optuna tuning trials. Use 0 to skip tuning.")
+
+    registry = subparsers.add_parser("registry", help="List model versions in a local registry.")
+    registry.add_argument("--path", type=Path, default=Path("artifacts/registry.json"), help="Path to registry JSON.")
     return parser
 
 
@@ -47,8 +51,9 @@ def main(argv: Optional[list[str]] = None) -> None:
                 indent=2,
             )
         )
+    elif args.command == "registry":
+        print(json.dumps(ModelRegistry(args.path).list(), indent=2))
 
 
 if __name__ == "__main__":
     main()
-

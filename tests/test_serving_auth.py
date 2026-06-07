@@ -17,12 +17,27 @@ def _bundle(path: Path) -> Path:
     bundle_path = path / "model_bundle.joblib"
     joblib.dump(
         {
+            "model_version": "test-version",
             "model_name": "dummy",
             "pipeline": model,
             "target": "target",
             "task_type": "classification",
             "feature_columns": iris.data.columns.tolist(),
             "metrics": {"accuracy": 0.33},
+            "monitoring_baseline": {
+                "numeric": {
+                    column: {
+                        "mean": float(iris.data[column].mean()),
+                        "std": float(iris.data[column].std()),
+                        "min": float(iris.data[column].min()),
+                        "max": float(iris.data[column].max()),
+                        "missing_rate": 0.0,
+                    }
+                    for column in iris.data.columns
+                },
+                "categorical": {},
+                "drift_threshold_z": 3.0,
+            },
         },
         bundle_path,
     )
@@ -50,6 +65,7 @@ def test_schema_is_open_when_google_auth_is_not_configured(tmp_path: Path) -> No
 
     assert response.status_code == 200
     assert response.json()["model_name"] == "dummy"
+    assert response.json()["model_version"] == "test-version"
 
 
 def test_schema_requires_session_when_google_auth_is_enabled(tmp_path: Path, monkeypatch) -> None:
@@ -123,3 +139,23 @@ def test_model_store_reports_missing_columns(tmp_path: Path) -> None:
     missing = store.missing_columns([{"sepal length (cm)": 5.1}])
 
     assert "sepal width (cm)" in missing
+
+
+def test_model_store_checks_drift(tmp_path: Path) -> None:
+    store = ModelBundleStore(_bundle(tmp_path))
+    store.load()
+
+    report = store.drift(
+        [
+            {
+                "sepal length (cm)": 100.0,
+                "sepal width (cm)": 100.0,
+                "petal length (cm)": 100.0,
+                "petal width (cm)": 100.0,
+            }
+        ]
+    )
+
+    assert report["monitoring_enabled"] is True
+    assert report["drift_detected"] is True
+    assert report["alerts"]

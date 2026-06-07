@@ -9,8 +9,10 @@ from automl_agent.agents import (
     DataAgent,
     DeploymentAgent,
     EvaluationAgent,
+    ExplainabilityAgent,
     FeatureAgent,
     HyperparameterAgent,
+    MonitoringAgent,
     ModelSearchAgent,
 )
 from automl_agent.types import PipelineReport, TaskType
@@ -23,6 +25,8 @@ class AutoMLOrchestrator:
         self.model_agent = ModelSearchAgent(max_workers=max_workers)
         self.evaluation_agent = EvaluationAgent()
         self.hyperparameter_agent = HyperparameterAgent(trials=tuning_trials)
+        self.explainability_agent = ExplainabilityAgent()
+        self.monitoring_agent = MonitoringAgent()
         self.deployment_agent = DeploymentAgent()
 
     def run(
@@ -40,14 +44,24 @@ class AutoMLOrchestrator:
         leaderboard = self.evaluation_agent.rank(candidates, data.task_type)
         tuned = self.hyperparameter_agent.tune(leaderboard[0], data, feature_plan)
         final_best = self._choose_final(leaderboard[0], tuned, data.task_type)
-        artifacts = self.deployment_agent.package(final_best, data, output_dir)
+        explainability = self.explainability_agent.explain(final_best, data)
+        monitoring_baseline = self.monitoring_agent.build_baseline(data)
+        artifacts = self.deployment_agent.package(
+            final_best,
+            data,
+            output_dir,
+            explainability=explainability,
+            monitoring_baseline=monitoring_baseline,
+        )
 
         report = PipelineReport(
             dataset=data.profile,
             leaderboard=leaderboard,
-            best_model_name=leaderboard[0].name,
-            best_metrics=leaderboard[0].metrics,
+            best_model_name=final_best.name,
+            best_metrics=final_best.metrics,
             tuned_metrics=tuned.metrics,
+            explainability=explainability,
+            monitoring_baseline=monitoring_baseline,
             artifact_dir=output_dir,
             model_bundle_path=artifacts["bundle"],
             notes=self._events(),
@@ -70,6 +84,8 @@ class AutoMLOrchestrator:
             self.model_agent,
             self.evaluation_agent,
             self.hyperparameter_agent,
+            self.explainability_agent,
+            self.monitoring_agent,
             self.deployment_agent,
         ]
         return [f"{event.agent}: {event.message}" for agent in agents for event in agent.events]
@@ -88,4 +104,3 @@ class AutoMLOrchestrator:
             for result in report.leaderboard
         ]
         path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
-

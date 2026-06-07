@@ -50,13 +50,35 @@ class CandidateResult:
 
 
 @dataclass
+class FeatureImportance:
+    feature: str
+    importance_mean: float
+    importance_std: float
+
+
+@dataclass
+class ExplainabilityReport:
+    method: str
+    primary_metric: str
+    importances: List[FeatureImportance]
+
+
+@dataclass
+class MonitoringBaseline:
+    numeric: Dict[str, Dict[str, float]]
+    categorical: Dict[str, Dict[str, Any]]
+    drift_threshold_z: float
+
+
+@dataclass
 class PipelineReport:
     dataset: DatasetProfile
     leaderboard: List[CandidateResult]
     best_model_name: str
     best_metrics: Dict[str, float]
     tuned_metrics: Dict[str, float]
+    explainability: Optional[ExplainabilityReport]
+    monitoring_baseline: Optional[MonitoringBaseline]
     artifact_dir: Path
     model_bundle_path: Path
     notes: List[str] = field(default_factory=list)
-

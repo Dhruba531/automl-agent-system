@@ -11,3 +11,9 @@ def test_end_to_end_iris_pipeline(tmp_path: Path) -> None:
     assert report.leaderboard
     assert report.dataset.task_type == "classification"
     assert "f1_macro" in report.best_metrics
+    assert report.explainability is not None
+    assert report.explainability.importances
+    assert report.monitoring_baseline is not None
+    assert (tmp_path / "manifest.json").exists()
+    assert (tmp_path / "explainability.json").exists()
+    assert (tmp_path / "monitoring_baseline.json").exists()

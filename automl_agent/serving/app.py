@@ -40,12 +40,23 @@ def create_app(
     def schema(_user: Dict[str, Any] = Depends(require_google_user)) -> Dict[str, Any]:
         return store.schema()
 
+    @app.get("/metadata")
+    def metadata(_user: Dict[str, Any] = Depends(require_google_user)) -> Dict[str, Any]:
+        return store.metadata()
+
     @app.post("/predict", response_model=PredictResponse)
     def predict(request: PredictRequest, _user: Dict[str, Any] = Depends(require_google_user)) -> PredictResponse:
         missing = store.missing_columns(request.rows)
         if missing:
             raise HTTPException(status_code=422, detail={"missing_columns": missing})
         return PredictResponse(**store.predict(request.rows))
+
+    @app.post("/drift")
+    def drift(request: PredictRequest, _user: Dict[str, Any] = Depends(require_google_user)) -> Dict[str, Any]:
+        missing = store.missing_columns(request.rows)
+        if missing:
+            raise HTTPException(status_code=422, detail={"missing_columns": missing})
+        return store.drift(request.rows)
 
     return app
 

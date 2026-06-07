@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional
 import joblib
 import pandas as pd
 
+from automl_agent.agents.monitoring import MonitoringAgent
+from automl_agent.types import MonitoringBaseline
+
 
 class ModelBundleStore:
     """Loads a packaged model once and exposes prediction-oriented operations."""
@@ -30,11 +33,25 @@ class ModelBundleStore:
     def schema(self) -> Dict[str, Any]:
         bundle = self.bundle
         return {
+            "model_version": bundle.get("model_version"),
             "model_name": bundle["model_name"],
             "task_type": bundle["task_type"],
             "target": bundle["target"],
             "feature_columns": bundle["feature_columns"],
             "metrics": bundle["metrics"],
+        }
+
+    def metadata(self) -> Dict[str, Any]:
+        bundle = self.bundle
+        return {
+            "model_version": bundle.get("model_version"),
+            "model_name": bundle["model_name"],
+            "task_type": bundle["task_type"],
+            "target": bundle["target"],
+            "metrics": bundle["metrics"],
+            "profile": bundle.get("profile"),
+            "explainability": bundle.get("explainability"),
+            "monitoring_enabled": bool(bundle.get("monitoring_baseline")),
         }
 
     def missing_columns(self, rows: List[Dict[str, Any]]) -> List[str]:
@@ -60,3 +77,11 @@ class ModelBundleStore:
             "probabilities": probabilities,
         }
 
+    def drift(self, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        baseline_payload = self.bundle.get("monitoring_baseline")
+        if not baseline_payload:
+            return {"monitoring_enabled": False, "drift_detected": False, "alerts": []}
+        baseline = MonitoringBaseline(**baseline_payload)
+        report = MonitoringAgent().check_drift(rows, baseline)
+        report["monitoring_enabled"] = True
+        return report

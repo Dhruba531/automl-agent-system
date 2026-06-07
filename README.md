@@ -9,6 +9,8 @@ The system automates the tabular ML path from dataset retrieval to deployable Fa
 - **Model Search Agent** trains candidate models in parallel.
 - **Evaluation Agent** benchmarks candidates and selects the best model.
 - **Hyperparameter Agent** tunes the winning model with Optuna, with a deterministic fallback if Optuna is unavailable.
+- **Explainability Agent** computes permutation importance for the selected model.
+- **Monitoring Agent** builds a training-data baseline for serving-time drift checks.
 - **Deployment Agent** saves the model bundle and generates a FastAPI serving module.
 
 The architecture notes in [`docs/DESIGN.md`](docs/DESIGN.md) describe the software engineering principles used across the project.
@@ -85,6 +87,28 @@ Optional settings:
 - `GOOGLE_REDIRECT_URI=https://your-domain.com/auth/callback` overrides callback URL generation behind a proxy.
 - `AUTH_SUCCESS_REDIRECT=/schema` controls where users land after login.
 - `SESSION_SECURE_COOKIES=true` should be used behind HTTPS.
+
+## Model Lifecycle Features
+
+Each pipeline run now creates a richer artifact set:
+
+- `model_bundle.joblib` includes the trained pipeline, metrics, model version, explainability report, and monitoring baseline.
+- `manifest.json` records artifact paths, task type, target, metrics, and model version.
+- `explainability.json` contains permutation-importance results.
+- `monitoring_baseline.json` stores baseline feature statistics for drift checks.
+- `registry.json` is an append-only local model registry in the parent artifacts directory.
+
+List registered model versions:
+
+```bash
+automl-agent registry --path artifacts/registry.json
+```
+
+Serving endpoints:
+
+- `GET /metadata` returns profile, metrics, explainability, and monitoring availability.
+- `POST /drift` checks incoming rows against the training baseline.
+- `POST /predict` still returns model predictions and class probabilities when available.
 
 ## CSV Usage
 
