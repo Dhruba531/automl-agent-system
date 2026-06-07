@@ -11,6 +11,8 @@ The system automates the tabular ML path from dataset retrieval to deployable Fa
 - **Hyperparameter Agent** tunes the winning model with Optuna, with a deterministic fallback if Optuna is unavailable.
 - **Deployment Agent** saves the model bundle and generates a FastAPI serving module.
 
+The architecture notes in [`docs/DESIGN.md`](docs/DESIGN.md) describe the software engineering principles used across the project.
+
 ## Quick Start
 
 ```bash

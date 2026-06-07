@@ -6,6 +6,9 @@ from fastapi.testclient import TestClient
 from sklearn.datasets import load_iris
 from sklearn.dummy import DummyClassifier
 
+from automl_agent.serving.config import GoogleAuthSettings, ServingSettings
+from automl_agent.serving.model_store import ModelBundleStore
+
 
 def _bundle(path: Path) -> Path:
     iris = load_iris(as_frame=True)
@@ -75,3 +78,48 @@ def test_enabled_google_auth_requires_credentials(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="GOOGLE_CLIENT_ID"):
         create_app(Path("missing.joblib"))
+
+
+def test_google_settings_parse_environment(monkeypatch) -> None:
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("SESSION_SECRET_KEY", "session-secret")
+    monkeypatch.setenv("GOOGLE_ALLOWED_DOMAINS", "Example.com, team.example ")
+    monkeypatch.setenv("SESSION_SECURE_COOKIES", "true")
+
+    settings = GoogleAuthSettings.from_env()
+
+    assert settings.enabled is True
+    assert settings.allowed_domains == ["example.com", "team.example"]
+    assert settings.secure_cookies is True
+    settings.validate()
+
+
+def test_serving_settings_can_be_injected(tmp_path: Path) -> None:
+    from automl_agent.serving.app import create_app
+
+    settings = ServingSettings(
+        model_bundle_path=_bundle(tmp_path),
+        google_auth=GoogleAuthSettings(
+            client_id=None,
+            client_secret=None,
+            session_secret=None,
+            enabled=False,
+        ),
+    )
+    app = create_app(settings=settings)
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["bundle"] == str(settings.model_bundle_path)
+
+
+def test_model_store_reports_missing_columns(tmp_path: Path) -> None:
+    store = ModelBundleStore(_bundle(tmp_path))
+    store.load()
+
+    missing = store.missing_columns([{"sepal length (cm)": 5.1}])
+
+    assert "sepal width (cm)" in missing

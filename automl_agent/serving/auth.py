@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from authlib.integrations.base_client import OAuthError
 from authlib.integrations.starlette_client import OAuth
@@ -10,61 +8,13 @@ from fastapi import Depends, HTTPException, Request, status
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
+from automl_agent.serving.config import GoogleAuthSettings
+
 
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
 
-@dataclass
-class GoogleAuthSettings:
-    client_id: Optional[str]
-    client_secret: Optional[str]
-    session_secret: Optional[str]
-    enabled: bool
-    allowed_domains: List[str]
-    success_redirect: str
-    redirect_uri: Optional[str]
-    secure_cookies: bool
-
-    @classmethod
-    def from_env(cls) -> "GoogleAuthSettings":
-        client_id = os.getenv("GOOGLE_CLIENT_ID")
-        client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-        session_secret = os.getenv("SESSION_SECRET_KEY")
-        explicit_enabled = os.getenv("GOOGLE_AUTH_ENABLED")
-        enabled = _env_bool(explicit_enabled) if explicit_enabled is not None else bool(client_id and client_secret)
-        allowed_domains = [
-            domain.strip().lower()
-            for domain in os.getenv("GOOGLE_ALLOWED_DOMAINS", "").split(",")
-            if domain.strip()
-        ]
-        return cls(
-            client_id=client_id,
-            client_secret=client_secret,
-            session_secret=session_secret,
-            enabled=enabled,
-            allowed_domains=allowed_domains,
-            success_redirect=os.getenv("AUTH_SUCCESS_REDIRECT", "/schema"),
-            redirect_uri=os.getenv("GOOGLE_REDIRECT_URI"),
-            secure_cookies=_env_bool(os.getenv("SESSION_SECURE_COOKIES"), default=False),
-        )
-
-    def validate(self) -> None:
-        if not self.enabled:
-            return
-        missing = []
-        if not self.client_id:
-            missing.append("GOOGLE_CLIENT_ID")
-        if not self.client_secret:
-            missing.append("GOOGLE_CLIENT_SECRET")
-        if not self.session_secret:
-            missing.append("SESSION_SECRET_KEY")
-        if missing:
-            joined = ", ".join(missing)
-            raise RuntimeError(f"Google auth is enabled, but these env vars are missing: {joined}")
-
-
-def configure_google_auth(app, settings: Optional[GoogleAuthSettings] = None) -> GoogleAuthSettings:
-    settings = settings or GoogleAuthSettings.from_env()
+def configure_google_auth(app, settings: GoogleAuthSettings) -> GoogleAuthSettings:
     settings.validate()
     app.state.google_auth_settings = settings
 
@@ -121,7 +71,9 @@ def configure_google_auth(app, settings: Optional[GoogleAuthSettings] = None) ->
 
 
 def require_google_user(request: Request) -> Dict[str, Any]:
-    settings = getattr(request.app.state, "google_auth_settings", GoogleAuthSettings.from_env())
+    settings = getattr(request.app.state, "google_auth_settings", None)
+    if settings is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Authentication is not configured.")
     if not settings.enabled:
         return {"auth": "disabled"}
     user = request.session.get("user")
@@ -154,10 +106,3 @@ def _validate_user(user: Dict[str, Any], allowed_domains: List[str]) -> None:
         hosted_domain = str(user.get("hd") or "").lower()
         if domain not in allowed_domains and hosted_domain not in allowed_domains:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Google account domain is not allowed.")
-
-
-def _env_bool(value: Optional[str], default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-

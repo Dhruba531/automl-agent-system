@@ -1,92 +1,53 @@
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-import joblib
-import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel, Field
 
 from automl_agent.serving.auth import configure_google_auth, require_google_user
+from automl_agent.serving.config import ServingSettings
+from automl_agent.serving.model_store import ModelBundleStore
+from automl_agent.serving.schemas import PredictRequest, PredictResponse
 
 
-DEFAULT_BUNDLE = Path(os.getenv("AUTOML_MODEL_BUNDLE", "artifacts/run/model_bundle.joblib"))
-
-
-class PredictRequest(BaseModel):
-    rows: List[Dict[str, Any]] = Field(..., min_length=1)
-
-
-class PredictResponse(BaseModel):
-    model_name: str
-    task_type: str
-    predictions: List[Any]
-    probabilities: Optional[List[Any]] = None
-
-
-def create_app(bundle_path: Path = DEFAULT_BUNDLE) -> FastAPI:
-    state: Dict[str, Any] = {"bundle_path": bundle_path, "bundle": None}
+def create_app(
+    bundle_path: Optional[Path] = None,
+    settings: Optional[ServingSettings] = None,
+    model_store: Optional[ModelBundleStore] = None,
+) -> FastAPI:
+    resolved_settings = settings or ServingSettings.from_env()
+    if bundle_path is not None:
+        resolved_settings = ServingSettings(bundle_path, resolved_settings.google_auth)
+    resolved_settings.validate()
+    store = model_store or ModelBundleStore(resolved_settings.model_bundle_path)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        if not state["bundle_path"].exists():
-            raise RuntimeError(f"Model bundle not found: {state['bundle_path']}")
-        state["bundle"] = joblib.load(state["bundle_path"])
+        store.load()
         yield
 
     app = FastAPI(title="AutoML Agent Model Server", version="0.1.0", lifespan=lifespan)
-    configure_google_auth(app)
+    configure_google_auth(app, resolved_settings.google_auth)
+    app.state.model_store = store
 
     @app.get("/health")
     def health() -> Dict[str, str]:
-        return {"status": "ok", "bundle": str(state["bundle_path"])}
+        return {"status": "ok", "bundle": str(store.bundle_path)}
 
     @app.get("/schema")
     def schema(_user: Dict[str, Any] = Depends(require_google_user)) -> Dict[str, Any]:
-        bundle = _bundle(state)
-        return {
-            "model_name": bundle["model_name"],
-            "task_type": bundle["task_type"],
-            "target": bundle["target"],
-            "feature_columns": bundle["feature_columns"],
-            "metrics": bundle["metrics"],
-        }
+        return store.schema()
 
     @app.post("/predict", response_model=PredictResponse)
     def predict(request: PredictRequest, _user: Dict[str, Any] = Depends(require_google_user)) -> PredictResponse:
-        bundle = _bundle(state)
-        frame = pd.DataFrame(request.rows)
-        missing = [column for column in bundle["feature_columns"] if column not in frame.columns]
+        missing = store.missing_columns(request.rows)
         if missing:
             raise HTTPException(status_code=422, detail={"missing_columns": missing})
-        frame = frame[bundle["feature_columns"]]
-        pipeline = bundle["pipeline"]
-        predictions = pipeline.predict(frame).tolist()
-        probabilities = None
-        if bundle["task_type"] == "classification" and hasattr(pipeline, "predict_proba"):
-            try:
-                probabilities = pipeline.predict_proba(frame).tolist()
-            except Exception:
-                probabilities = None
-        return PredictResponse(
-            model_name=bundle["model_name"],
-            task_type=bundle["task_type"],
-            predictions=predictions,
-            probabilities=probabilities,
-        )
+        return PredictResponse(**store.predict(request.rows))
 
     return app
-
-
-def _bundle(state: Dict[str, Any]) -> Dict[str, Any]:
-    if state["bundle"] is None:
-        if not state["bundle_path"].exists():
-            raise HTTPException(status_code=503, detail=f"Model bundle not found: {state['bundle_path']}")
-        state["bundle"] = joblib.load(state["bundle_path"])
-    return state["bundle"]
 
 
 app = create_app()
