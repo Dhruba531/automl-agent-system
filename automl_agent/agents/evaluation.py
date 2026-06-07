@@ -10,6 +10,7 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
     roc_auc_score,
+    root_mean_squared_error,
 )
 
 from automl_agent.agents.base import BaseAgent
@@ -38,7 +39,7 @@ class EvaluationAgent(BaseAgent):
                     pass
             return metrics
 
-        rmse = mean_squared_error(y_true, predictions, squared=False)
+        rmse = root_mean_squared_error(y_true, predictions)
         return {
             "rmse": float(rmse),
             "mae": float(mean_absolute_error(y_true, predictions)),
@@ -51,10 +52,10 @@ class EvaluationAgent(BaseAgent):
             raise RuntimeError("No candidate models trained successfully.")
         key = self.primary_metric(task_type)
         reverse = task_type == "classification"
-        ranked = sorted(successful, key=lambda result: result.metrics.get(key, -np.inf), reverse=reverse)
+        missing_value = -np.inf if reverse else np.inf
+        ranked = sorted(successful, key=lambda result: result.metrics.get(key, missing_value), reverse=reverse)
         self.log(f"Ranked {len(ranked)} successful candidates by {key}.")
         return ranked
 
     def primary_metric(self, task_type: TaskType) -> str:
         return "f1_macro" if task_type == "classification" else "rmse"
-

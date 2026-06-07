@@ -110,6 +110,27 @@ Serving endpoints:
 - `POST /drift` checks incoming rows against the training baseline.
 - `POST /predict` still returns model predictions and class probabilities when available.
 
+## Experiment Harness
+
+The harness runs repeatable benchmark cases and writes aggregate outputs:
+
+```bash
+automl-agent harness --config examples/harness.json --output artifacts/harness
+```
+
+Or run built-in dataset cases directly:
+
+```bash
+automl-agent harness --dataset iris --dataset diabetes --workers 2 --trials 0
+```
+
+Harness outputs:
+
+- `results.json` contains structured per-case results.
+- `results.csv` is spreadsheet-friendly.
+- `summary.md` is a readable leaderboard.
+- Each case gets its own full AutoML artifact directory.
+
 ## CSV Usage
 
 ```bash

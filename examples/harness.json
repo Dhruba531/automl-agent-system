@@ -1,0 +1,17 @@
+{
+  "output_dir": "artifacts/harness",
+  "cases": [
+    {
+      "name": "iris-fast",
+      "dataset": "iris",
+      "workers": 2,
+      "trials": 0
+    },
+    {
+      "name": "diabetes-regression",
+      "dataset": "diabetes",
+      "workers": 2,
+      "trials": 0
+    }
+  ]
+}

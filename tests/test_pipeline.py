@@ -17,3 +17,13 @@ def test_end_to_end_iris_pipeline(tmp_path: Path) -> None:
     assert (tmp_path / "manifest.json").exists()
     assert (tmp_path / "explainability.json").exists()
     assert (tmp_path / "monitoring_baseline.json").exists()
+
+
+def test_end_to_end_regression_pipeline(tmp_path: Path) -> None:
+    orchestrator = AutoMLOrchestrator(max_workers=2, tuning_trials=0)
+    report = orchestrator.run(output_dir=tmp_path, dataset="diabetes")
+
+    assert report.model_bundle_path.exists()
+    assert report.dataset.task_type == "regression"
+    assert "rmse" in report.best_metrics
+    assert report.best_metrics["rmse"] > 0
