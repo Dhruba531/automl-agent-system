@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+from automl_agent.serving.auth import configure_google_auth, require_google_user
 
 
 DEFAULT_BUNDLE = Path(os.getenv("AUTOML_MODEL_BUNDLE", "artifacts/run/model_bundle.joblib"))
@@ -25,21 +28,24 @@ class PredictResponse(BaseModel):
 
 
 def create_app(bundle_path: Path = DEFAULT_BUNDLE) -> FastAPI:
-    app = FastAPI(title="AutoML Agent Model Server", version="0.1.0")
     state: Dict[str, Any] = {"bundle_path": bundle_path, "bundle": None}
 
-    @app.on_event("startup")
-    def load_bundle() -> None:
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
         if not state["bundle_path"].exists():
             raise RuntimeError(f"Model bundle not found: {state['bundle_path']}")
         state["bundle"] = joblib.load(state["bundle_path"])
+        yield
+
+    app = FastAPI(title="AutoML Agent Model Server", version="0.1.0", lifespan=lifespan)
+    configure_google_auth(app)
 
     @app.get("/health")
     def health() -> Dict[str, str]:
         return {"status": "ok", "bundle": str(state["bundle_path"])}
 
     @app.get("/schema")
-    def schema() -> Dict[str, Any]:
+    def schema(_user: Dict[str, Any] = Depends(require_google_user)) -> Dict[str, Any]:
         bundle = _bundle(state)
         return {
             "model_name": bundle["model_name"],
@@ -50,7 +56,7 @@ def create_app(bundle_path: Path = DEFAULT_BUNDLE) -> FastAPI:
         }
 
     @app.post("/predict", response_model=PredictResponse)
-    def predict(request: PredictRequest) -> PredictResponse:
+    def predict(request: PredictRequest, _user: Dict[str, Any] = Depends(require_google_user)) -> PredictResponse:
         bundle = _bundle(state)
         frame = pd.DataFrame(request.rows)
         missing = [column for column in bundle["feature_columns"] if column not in frame.columns]

@@ -53,6 +53,37 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 For realistic predictions, send all columns listed by `GET /schema`.
 
+## Google Authentication
+
+The FastAPI serving app supports Google OpenID Connect login. Authentication is enabled automatically when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are present, or explicitly with `GOOGLE_AUTH_ENABLED=true`.
+
+Create an OAuth client in Google Cloud Console and add this redirect URI for local development:
+
+```text
+http://127.0.0.1:8000/auth/callback
+```
+
+Then run the server with credentials:
+
+```bash
+export GOOGLE_AUTH_ENABLED=true
+export GOOGLE_CLIENT_ID="your-google-oauth-client-id"
+export GOOGLE_CLIENT_SECRET="your-google-oauth-client-secret"
+export SESSION_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export AUTOML_MODEL_BUNDLE=artifacts/breast_cancer/model_bundle.joblib
+
+uvicorn automl_agent.serving.app:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000/auth/login` to sign in. After login, `/schema`, `/predict`, and `/auth/me` are available to the authenticated browser session. `/health` remains public.
+
+Optional settings:
+
+- `GOOGLE_ALLOWED_DOMAINS=example.com,team.example` restricts access to Google accounts from specific email or hosted domains.
+- `GOOGLE_REDIRECT_URI=https://your-domain.com/auth/callback` overrides callback URL generation behind a proxy.
+- `AUTH_SUCCESS_REDIRECT=/schema` controls where users land after login.
+- `SESSION_SECURE_COOKIES=true` should be used behind HTTPS.
+
 ## CSV Usage
 
 ```bash
@@ -68,4 +99,3 @@ pytest
 ```
 
 The implementation is intentionally small and readable so it can become a research scaffold: add agent memory, LLM planning, richer data retrieval, distributed training, model cards, drift monitoring, or cloud deployment without changing the core contracts.
-
