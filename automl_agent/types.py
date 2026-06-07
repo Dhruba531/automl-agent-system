@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+
+import pandas as pd
+
+TaskType = Literal["classification", "regression"]
+
+
+@dataclass
+class DatasetProfile:
+    rows: int
+    columns: int
+    target: str
+    task_type: TaskType
+    numeric_features: List[str]
+    categorical_features: List[str]
+    missing_values: Dict[str, int]
+    target_summary: Dict[str, Any]
+
+
+@dataclass
+class DataBundle:
+    dataset_name: str
+    target: str
+    task_type: TaskType
+    X_train: pd.DataFrame
+    X_test: pd.DataFrame
+    y_train: pd.Series
+    y_test: pd.Series
+    profile: DatasetProfile
+
+
+@dataclass
+class FeaturePlan:
+    numeric_features: List[str]
+    categorical_features: List[str]
+    profile: DatasetProfile
+
+
+@dataclass
+class CandidateResult:
+    name: str
+    estimator: Any
+    metrics: Dict[str, float]
+    train_seconds: float
+    error: Optional[str] = None
+
+
+@dataclass
+class PipelineReport:
+    dataset: DatasetProfile
+    leaderboard: List[CandidateResult]
+    best_model_name: str
+    best_metrics: Dict[str, float]
+    tuned_metrics: Dict[str, float]
+    artifact_dir: Path
+    model_bundle_path: Path
+    notes: List[str] = field(default_factory=list)
+
