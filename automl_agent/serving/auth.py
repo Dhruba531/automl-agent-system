@@ -18,6 +18,15 @@ def configure_google_auth(app, settings: GoogleAuthSettings) -> GoogleAuthSettin
     settings.validate()
     app.state.google_auth_settings = settings
 
+    @app.get("/auth/status")
+    async def auth_status(request: Request):
+        user = request.session.get("user") if settings.enabled else None
+        return {
+            "enabled": settings.enabled,
+            "authenticated": bool(user),
+            "user": user,
+        }
+
     if not settings.enabled:
         return settings
 

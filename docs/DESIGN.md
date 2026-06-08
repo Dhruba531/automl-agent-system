@@ -8,6 +8,7 @@ This project is intentionally small, but it still follows production-oriented so
 - `automl_agent/orchestrator.py` coordinates agents and owns workflow order.
 - `automl_agent/harness.py` owns repeatable experiment execution and aggregate result writing.
 - `automl_agent/serving/` owns API concerns only: configuration, authentication, request schemas, and model serving.
+- `automl_agent/frontend/` owns the bundled browser console served by FastAPI.
 - `automl_agent/registry.py` owns append-only model version records.
 - Artifacts are treated as runtime output and are excluded from source control.
 
@@ -25,6 +26,7 @@ This project is intentionally small, but it still follows production-oriented so
 - **Portability:** configuration comes from environment variables and the package supports Python 3.9+.
 - **Observability:** packaged models include explainability and drift-monitoring artifacts so behavior can be inspected after deployment.
 - **Reproducibility:** the experiment harness isolates each case and writes JSON, CSV, and Markdown outputs.
+- **Usability:** the frontend exposes the serving API as an operational console without requiring a separate web build step.
 
 ## Extension Points
 

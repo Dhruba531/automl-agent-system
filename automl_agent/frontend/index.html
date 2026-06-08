@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AutoML Agent Console</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">A</span>
+          <div>
+            <h1>AutoML Agent</h1>
+            <p>Model operations console</p>
+          </div>
+        </div>
+        <nav aria-label="Primary">
+          <button class="nav-item is-active" data-view="overview" type="button">Overview</button>
+          <button class="nav-item" data-view="predict" type="button">Predict</button>
+          <button class="nav-item" data-view="drift" type="button">Drift</button>
+          <button class="nav-item" data-view="explain" type="button">Explainability</button>
+        </nav>
+        <div class="auth-panel">
+          <div class="label">Access</div>
+          <div id="authState" class="auth-state">Checking</div>
+          <a id="loginLink" class="link-button is-hidden" href="/auth/login">Sign in with Google</a>
+          <button id="logoutButton" class="ghost-button is-hidden" type="button">Sign out</button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Serving bundle</p>
+            <h2 id="modelTitle">Loading model</h2>
+          </div>
+          <div class="status-strip">
+            <span id="healthBadge" class="badge">Health pending</span>
+            <span id="taskBadge" class="badge muted">Task unknown</span>
+          </div>
+        </header>
+
+        <section id="notice" class="notice is-hidden"></section>
+
+        <section class="view is-active" data-panel="overview">
+          <div class="metric-grid">
+            <article class="metric">
+              <span>Model</span>
+              <strong id="modelName">-</strong>
+            </article>
+            <article class="metric">
+              <span>Version</span>
+              <strong id="modelVersion">-</strong>
+            </article>
+            <article class="metric">
+              <span>Target</span>
+              <strong id="targetName">-</strong>
+            </article>
+            <article class="metric">
+              <span>Features</span>
+              <strong id="featureCount">-</strong>
+            </article>
+          </div>
+
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Metrics</h3>
+              </div>
+              <div id="metricsList" class="kv-list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Dataset Profile</h3>
+              </div>
+              <div id="profileList" class="kv-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" data-panel="predict">
+          <div class="work-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Input Rows</h3>
+                <button id="sampleButton" class="tool-button" type="button" title="Insert sample row">Sample</button>
+              </div>
+              <textarea id="predictInput" spellcheck="false"></textarea>
+              <div class="actions">
+                <button id="predictButton" class="primary-button" type="button">Run Prediction</button>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Prediction Result</h3>
+              </div>
+              <pre id="predictionOutput" class="result-box"></pre>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" data-panel="drift">
+          <div class="work-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Drift Check Rows</h3>
+                <button id="driftSampleButton" class="tool-button" type="button" title="Insert shifted sample">Shifted</button>
+              </div>
+              <textarea id="driftInput" spellcheck="false"></textarea>
+              <div class="actions">
+                <button id="driftButton" class="primary-button" type="button">Check Drift</button>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Drift Report</h3>
+              </div>
+              <pre id="driftOutput" class="result-box"></pre>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" data-panel="explain">
+          <section class="panel">
+            <div class="panel-header">
+              <h3>Feature Importance</h3>
+              <span id="explainMethod" class="badge muted">Unavailable</span>
+            </div>
+            <div id="importanceList" class="importance-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

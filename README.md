@@ -41,6 +41,14 @@ Serve the best model:
 uvicorn automl_agent.serving.app:app --host 127.0.0.1 --port 8000
 ```
 
+Open the frontend console:
+
+```text
+http://127.0.0.1:8000/
+```
+
+The bundled UI provides model metadata, metrics, schema-aware prediction input, drift checks, explainability, and Google sign-in status.
+
 Set `AUTOML_MODEL_BUNDLE` when serving a specific artifact:
 
 ```bash
@@ -106,6 +114,7 @@ automl-agent registry --path artifacts/registry.json
 
 Serving endpoints:
 
+- `GET /` serves the frontend console.
 - `GET /metadata` returns profile, metrics, explainability, and monitoring availability.
 - `POST /drift` checks incoming rows against the training baseline.
 - `POST /predict` still returns model predictions and class probabilities when available.

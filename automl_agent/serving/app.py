@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from automl_agent.serving.auth import configure_google_auth, require_google_user
 from automl_agent.serving.config import ServingSettings
@@ -31,6 +34,12 @@ def create_app(
     app = FastAPI(title="AutoML Agent Model Server", version="0.1.0", lifespan=lifespan)
     configure_google_auth(app, resolved_settings.google_auth)
     app.state.model_store = store
+    frontend_dir = files("automl_agent.frontend")
+    app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def index():
+        return FileResponse(str(frontend_dir / "index.html"))
 
     @app.get("/health")
     def health() -> Dict[str, str]:
