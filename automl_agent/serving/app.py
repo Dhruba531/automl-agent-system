@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -32,6 +34,15 @@ def create_app(
         yield
 
     app = FastAPI(title="AutoML Agent Model Server", version="0.1.0", lifespan=lifespan)
+    cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
     configure_google_auth(app, resolved_settings.google_auth)
     app.state.model_store = store
     frontend_dir = files("automl_agent.frontend")

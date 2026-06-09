@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 from automl_agent.agents import (
     DataAgent,
@@ -19,15 +19,22 @@ from automl_agent.types import PipelineReport, TaskType
 
 
 class AutoMLOrchestrator:
-    def __init__(self, max_workers: int = 4, tuning_trials: int = 20) -> None:
+    def __init__(
+        self,
+        max_workers: int = 4,
+        tuning_trials: int = 20,
+        drift_threshold_z: float = 3.0,
+        include_models: Optional[Set[str]] = None,
+    ) -> None:
         self.data_agent = DataAgent()
         self.feature_agent = FeatureAgent()
-        self.model_agent = ModelSearchAgent(max_workers=max_workers)
+        self.model_agent = ModelSearchAgent(max_workers=max_workers, include_models=include_models)
         self.evaluation_agent = EvaluationAgent()
         self.hyperparameter_agent = HyperparameterAgent(trials=tuning_trials)
         self.explainability_agent = ExplainabilityAgent()
         self.monitoring_agent = MonitoringAgent()
         self.deployment_agent = DeploymentAgent()
+        self.drift_threshold_z = drift_threshold_z
 
     def run(
         self,
@@ -45,7 +52,7 @@ class AutoMLOrchestrator:
         tuned = self.hyperparameter_agent.tune(leaderboard[0], data, feature_plan)
         final_best = self._choose_final(leaderboard[0], tuned, data.task_type)
         explainability = self.explainability_agent.explain(final_best, data)
-        monitoring_baseline = self.monitoring_agent.build_baseline(data)
+        monitoring_baseline = self.monitoring_agent.build_baseline(data, drift_threshold_z=self.drift_threshold_z)
         artifacts = self.deployment_agent.package(
             final_best,
             data,
@@ -73,7 +80,7 @@ class AutoMLOrchestrator:
         metric = self.evaluation_agent.primary_metric(task_type)
         original_score = original.metrics[metric]
         tuned_score = tuned.metrics.get(metric, original_score)
-        if task_type == "classification":
+        if self.evaluation_agent.is_higher_better(task_type):
             return tuned if tuned_score >= original_score else original
         return tuned if tuned_score <= original_score else original
 

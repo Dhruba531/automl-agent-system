@@ -49,6 +49,8 @@ class GoogleAuthSettings:
         if missing:
             joined = ", ".join(missing)
             raise RuntimeError(f"Google auth is enabled, but these env vars are missing: {joined}")
+        if self.session_secret and len(self.session_secret) < 32:
+            raise RuntimeError("SESSION_SECRET_KEY must be at least 32 characters.")
 
 
 @dataclass(frozen=True)

@@ -32,4 +32,4 @@ automl-agent = "automl_agent.cli:main"
 include = ["automl_agent*"]
 
 [tool.setuptools.package-data]
-automl_agent.frontend = ["*.html", "*.css", "*.js"]
+automl_agent = ["frontend/*.html", "frontend/*.css", "frontend/*.js"]

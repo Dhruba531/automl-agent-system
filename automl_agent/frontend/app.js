@@ -48,9 +48,10 @@ function renderKeyValues(selector, values) {
 
 function sampleRows(multiplier = 1) {
   const columns = state.schema?.feature_columns || [];
+  const categoricals = new Set(state.metadata?.profile?.categorical_features || []);
   const row = {};
   columns.forEach((column, index) => {
-    row[column] = Number(((index + 1) * multiplier).toFixed(3));
+    row[column] = categoricals.has(column) ? "category_1" : Number(((index + 1) * multiplier).toFixed(3));
   });
   return { rows: [row] };
 }

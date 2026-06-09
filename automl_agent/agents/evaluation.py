@@ -51,7 +51,7 @@ class EvaluationAgent(BaseAgent):
         if not successful:
             raise RuntimeError("No candidate models trained successfully.")
         key = self.primary_metric(task_type)
-        reverse = task_type == "classification"
+        reverse = self.is_higher_better(task_type)
         missing_value = -np.inf if reverse else np.inf
         ranked = sorted(successful, key=lambda result: result.metrics.get(key, missing_value), reverse=reverse)
         self.log(f"Ranked {len(ranked)} successful candidates by {key}.")
@@ -59,3 +59,6 @@ class EvaluationAgent(BaseAgent):
 
     def primary_metric(self, task_type: TaskType) -> str:
         return "f1_macro" if task_type == "classification" else "rmse"
+
+    def is_higher_better(self, task_type: TaskType) -> bool:
+        return task_type == "classification"

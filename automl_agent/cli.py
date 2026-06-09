@@ -23,6 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--output", type=Path, default=Path("artifacts/run"), help="Artifact output directory.")
     run.add_argument("--workers", type=int, default=4, help="Parallel candidate training workers.")
     run.add_argument("--trials", type=int, default=20, help="Optuna tuning trials. Use 0 to skip tuning.")
+    run.add_argument("--drift-threshold-z", type=float, default=3.0, dest="drift_threshold_z", help="Z-score threshold for drift detection.")
+    run.add_argument("--models", help="Comma-separated model names to include, e.g. random_forest,ridge.")
 
     registry = subparsers.add_parser("registry", help="List model versions in a local registry.")
     registry.add_argument("--path", type=Path, default=Path("artifacts/registry.json"), help="Path to registry JSON.")
@@ -40,7 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> None:
     args = build_parser().parse_args(argv)
     if args.command == "run":
-        orchestrator = AutoMLOrchestrator(max_workers=args.workers, tuning_trials=args.trials)
+        include_models = set(args.models.split(",")) if args.models else None
+        orchestrator = AutoMLOrchestrator(
+            max_workers=args.workers,
+            tuning_trials=args.trials,
+            drift_threshold_z=args.drift_threshold_z,
+            include_models=include_models,
+        )
         report = orchestrator.run(
             output_dir=args.output,
             dataset=args.dataset if not args.csv else None,

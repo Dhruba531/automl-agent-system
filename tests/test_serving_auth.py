@@ -72,7 +72,7 @@ def test_schema_requires_session_when_google_auth_is_enabled(tmp_path: Path, mon
     monkeypatch.setenv("GOOGLE_AUTH_ENABLED", "true")
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "client-secret")
-    monkeypatch.setenv("SESSION_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("SESSION_SECRET_KEY", "test-secret-key-for-testing-only-32x")
 
     from automl_agent.serving.app import create_app
 
@@ -99,7 +99,7 @@ def test_enabled_google_auth_requires_credentials(monkeypatch) -> None:
 def test_google_settings_parse_environment(monkeypatch) -> None:
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "client-secret")
-    monkeypatch.setenv("SESSION_SECRET_KEY", "session-secret")
+    monkeypatch.setenv("SESSION_SECRET_KEY", "session-secret-key-for-testing-only-32")
     monkeypatch.setenv("GOOGLE_ALLOWED_DOMAINS", "Example.com, team.example ")
     monkeypatch.setenv("SESSION_SECURE_COOKIES", "true")
 

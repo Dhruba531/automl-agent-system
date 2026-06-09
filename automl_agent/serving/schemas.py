@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class PredictRequest(BaseModel):
-    rows: List[Dict[str, Any]] = Field(..., min_length=1)
+    rows: List[Dict[str, Any]] = Field(..., min_length=1, max_length=1000)
 
 
 class PredictResponse(BaseModel):

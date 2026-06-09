@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Tuple
+
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -23,6 +25,10 @@ class FeatureAgent(BaseAgent):
             categorical_features=profile.categorical_features,
             profile=profile,
         )
+
+    def plan_and_build(self, data: DataBundle) -> Tuple[FeaturePlan, ColumnTransformer]:
+        plan = self.plan(data)
+        return plan, self.build_preprocessor(plan)
 
     def build_preprocessor(self, plan: FeaturePlan) -> ColumnTransformer:
         numeric = Pipeline(

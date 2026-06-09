@@ -13,6 +13,15 @@ from automl_agent.registry import ModelRegistry
 from automl_agent.types import CandidateResult, DataBundle, ExplainabilityReport, MonitoringBaseline
 
 
+def _rel(path: Optional[Path], base: Path) -> Optional[str]:
+    if path is None:
+        return None
+    try:
+        return str(path.relative_to(base))
+    except ValueError:
+        return str(path)
+
+
 class DeploymentAgent(BaseAgent):
     name = "Deployment Agent"
 
@@ -53,6 +62,7 @@ class DeploymentAgent(BaseAgent):
         if monitoring_baseline:
             monitoring_path.write_text(json.dumps(asdict(monitoring_baseline), indent=2), encoding="utf-8")
 
+        base = artifact_dir.parent
         manifest = {
             "model_version": model_version,
             "model_name": best.name,
@@ -60,11 +70,11 @@ class DeploymentAgent(BaseAgent):
             "target": data.target,
             "metrics": best.metrics,
             "artifacts": {
-                "bundle": str(bundle_path),
-                "profile": str(profile_path),
-                "metrics": str(report_path),
-                "explainability": str(explainability_path) if explainability else None,
-                "monitoring_baseline": str(monitoring_path) if monitoring_baseline else None,
+                "bundle": _rel(bundle_path, base),
+                "profile": _rel(profile_path, base),
+                "metrics": _rel(report_path, base),
+                "explainability": _rel(explainability_path, base) if explainability else None,
+                "monitoring_baseline": _rel(monitoring_path, base) if monitoring_baseline else None,
             },
         }
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
