@@ -12,6 +12,7 @@ from automl_agent.agents import (
     ExplainabilityAgent,
     FeatureAgent,
     HyperparameterAgent,
+    InsightAgent,
     MonitoringAgent,
     ModelSearchAgent,
 )
@@ -19,7 +20,7 @@ from automl_agent.types import PipelineReport, TaskType
 
 
 class AutoMLOrchestrator:
-    def __init__(self, max_workers: int = 4, tuning_trials: int = 20) -> None:
+    def __init__(self, max_workers: int = 4, tuning_trials: int = 20, llm_connector=None) -> None:
         self.data_agent = DataAgent()
         self.feature_agent = FeatureAgent()
         self.model_agent = ModelSearchAgent(max_workers=max_workers)
@@ -28,6 +29,7 @@ class AutoMLOrchestrator:
         self.explainability_agent = ExplainabilityAgent()
         self.monitoring_agent = MonitoringAgent()
         self.deployment_agent = DeploymentAgent()
+        self.insight_agent = InsightAgent(llm_connector)
 
     def run(
         self,
@@ -53,6 +55,9 @@ class AutoMLOrchestrator:
             explainability=explainability,
             monitoring_baseline=monitoring_baseline,
         )
+        llm_summary = self.insight_agent.summarize(data, leaderboard, final_best, explainability)
+        if llm_summary:
+            (output_dir / "llm_summary.md").write_text(llm_summary, encoding="utf-8")
 
         report = PipelineReport(
             dataset=data.profile,
@@ -64,6 +69,7 @@ class AutoMLOrchestrator:
             monitoring_baseline=monitoring_baseline,
             artifact_dir=output_dir,
             model_bundle_path=artifacts["bundle"],
+            llm_summary=llm_summary,
             notes=self._events(),
         )
         self._write_report(report, output_dir / "pipeline_report.json")
@@ -91,6 +97,7 @@ class AutoMLOrchestrator:
             self.explainability_agent,
             self.monitoring_agent,
             self.deployment_agent,
+            self.insight_agent,
         ]
         return [f"{event.agent}: {event.message}" for agent in agents for event in agent.events]
 

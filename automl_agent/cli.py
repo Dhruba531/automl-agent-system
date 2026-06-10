@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from automl_agent.harness import ExperimentHarness, HarnessCase
+from automl_agent.llm import VLLMConfig, VLLMConnector
 from automl_agent.orchestrator import AutoMLOrchestrator
 from automl_agent.registry import ModelRegistry
 
@@ -23,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--output", type=Path, default=Path("artifacts/run"), help="Artifact output directory.")
     run.add_argument("--workers", type=int, default=4, help="Parallel candidate training workers.")
     run.add_argument("--trials", type=int, default=20, help="Optuna tuning trials. Use 0 to skip tuning.")
+    run.add_argument("--llm-base-url", help="vLLM OpenAI-compatible base URL (defaults to VLLM_BASE_URL).")
+    run.add_argument("--llm-model", help="Model name served by vLLM (defaults to VLLM_MODEL or the first served model).")
 
     registry = subparsers.add_parser("registry", help="List model versions in a local registry.")
     registry.add_argument("--path", type=Path, default=Path("artifacts/registry.json"), help="Path to registry JSON.")
@@ -37,17 +40,32 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_llm_connector(args: argparse.Namespace) -> Optional[VLLMConnector]:
+    config = VLLMConfig.from_env()
+    if args.llm_base_url:
+        config = config or VLLMConfig()
+        config.base_url = args.llm_base_url
+    if config and args.llm_model:
+        config.model = args.llm_model
+    return VLLMConnector(config) if config else None
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     args = build_parser().parse_args(argv)
     if args.command == "run":
-        orchestrator = AutoMLOrchestrator(max_workers=args.workers, tuning_trials=args.trials)
-        report = orchestrator.run(
-            output_dir=args.output,
-            dataset=args.dataset if not args.csv else None,
-            csv_path=args.csv,
-            target=args.target,
-            task_type=args.task,
-        )
+        connector = _build_llm_connector(args)
+        orchestrator = AutoMLOrchestrator(max_workers=args.workers, tuning_trials=args.trials, llm_connector=connector)
+        try:
+            report = orchestrator.run(
+                output_dir=args.output,
+                dataset=args.dataset if not args.csv else None,
+                csv_path=args.csv,
+                target=args.target,
+                task_type=args.task,
+            )
+        finally:
+            if connector:
+                connector.close()
         print(
             json.dumps(
                 {
@@ -56,6 +74,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                     "tuned_metrics": report.tuned_metrics,
                     "model_bundle": str(report.model_bundle_path),
                     "report": str(report.artifact_dir / "pipeline_report.json"),
+                    "llm_summary": str(report.artifact_dir / "llm_summary.md") if report.llm_summary else None,
                 },
                 indent=2,
             )

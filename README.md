@@ -12,6 +12,7 @@ The system automates the tabular ML path from dataset retrieval to deployable Fa
 - **Explainability Agent** computes permutation importance for the selected model.
 - **Monitoring Agent** builds a training-data baseline for serving-time drift checks.
 - **Deployment Agent** saves the model bundle and generates a FastAPI serving module.
+- **Insight Agent** (optional) summarizes the run in natural language through a vLLM connector.
 
 The architecture notes in [`docs/DESIGN.md`](docs/DESIGN.md) describe the software engineering principles used across the project.
 
@@ -139,6 +140,42 @@ Harness outputs:
 - `results.csv` is spreadsheet-friendly.
 - `summary.md` is a readable leaderboard.
 - Each case gets its own full AutoML artifact directory.
+
+## vLLM Connector
+
+The pipeline can generate a natural-language run summary through any [vLLM](https://docs.vllm.ai) server exposing the OpenAI-compatible API. Start a server, for example:
+
+```bash
+vllm serve Qwen/Qwen2.5-7B-Instruct
+```
+
+Then point the pipeline at it:
+
+```bash
+export VLLM_BASE_URL=http://localhost:8000/v1
+automl-agent run --dataset breast_cancer --output artifacts/breast_cancer
+```
+
+When `VLLM_BASE_URL` is set, the Insight Agent sends the dataset profile, leaderboard, and top features to the model and writes `llm_summary.md` next to the other artifacts. The summary also appears in `pipeline_report.json`. LLM failures never fail the pipeline; the run continues without a summary.
+
+Configuration:
+
+- `VLLM_BASE_URL` (or `--llm-base-url`) enables the connector.
+- `VLLM_MODEL` (or `--llm-model`) selects a model; defaults to the first model the server lists.
+- `VLLM_API_KEY` sends a bearer token when the server requires one.
+- `VLLM_MAX_TOKENS`, `VLLM_TEMPERATURE`, `VLLM_TIMEOUT_SECONDS` tune the request.
+
+Programmatic use:
+
+```python
+from automl_agent.llm import VLLMConfig, VLLMConnector
+from automl_agent.orchestrator import AutoMLOrchestrator
+
+connector = VLLMConnector(VLLMConfig(base_url="http://localhost:8000/v1"))
+orchestrator = AutoMLOrchestrator(llm_connector=connector)
+```
+
+Any object with a `chat(messages) -> str` method works as a connector, so other OpenAI-compatible backends can be swapped in.
 
 ## CSV Usage
 

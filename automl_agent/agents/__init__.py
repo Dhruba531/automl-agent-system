@@ -4,6 +4,7 @@ from automl_agent.agents.evaluation import EvaluationAgent
 from automl_agent.agents.explainability import ExplainabilityAgent
 from automl_agent.agents.feature import FeatureAgent
 from automl_agent.agents.hyperparameter import HyperparameterAgent
+from automl_agent.agents.insight import InsightAgent
 from automl_agent.agents.monitoring import MonitoringAgent
 from automl_agent.agents.model_search import ModelSearchAgent
 
@@ -14,6 +15,7 @@ __all__ = [
     "ExplainabilityAgent",
     "FeatureAgent",
     "HyperparameterAgent",
+    "InsightAgent",
     "MonitoringAgent",
     "ModelSearchAgent",
 ]
