@@ -4,11 +4,11 @@ A runnable multi-agent AutoML prototype inspired by **AutoML-Agent: A Multi-Agen
 
 The system automates the tabular ML path from dataset retrieval to deployable FastAPI service:
 
-- **Data Agent** retrieves built-in or CSV datasets, profiles them, infers task type, and creates train/test splits.
-- **Feature Agent** builds preprocessing pipelines for numeric and categorical data.
-- **Model Search Agent** trains candidate models in parallel.
-- **Evaluation Agent** benchmarks candidates and selects the best model.
-- **Hyperparameter Agent** tunes the winning model with Optuna, with a deterministic fallback if Optuna is unavailable.
+- **Data Agent** retrieves built-in or CSV datasets, drops duplicate rows, missing-target rows, and constant or ID-like columns, profiles the result, infers task type, and creates train/test splits.
+- **Feature Agent** builds preprocessing pipelines for numeric and categorical data, capping one-hot cardinality so high-cardinality columns cannot explode the feature space.
+- **Model Search Agent** trains candidate models in parallel (including histogram gradient boosting) and scores each with cross-validation on the training split.
+- **Evaluation Agent** ranks candidates by cross-validated score, keeping the test split as a true holdout for reporting (with multiclass-aware ROC AUC).
+- **Hyperparameter Agent** tunes the winning model with Optuna, with a deterministic fallback if Optuna is unavailable; the tuned model replaces the original only if its cross-validated score is better.
 - **Explainability Agent** computes permutation importance for the selected model.
 - **Monitoring Agent** builds a training-data baseline for serving-time drift checks.
 - **Deployment Agent** saves the model bundle and generates a FastAPI serving module.

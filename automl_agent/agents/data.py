@@ -40,6 +40,7 @@ class DataAgent(BaseAgent):
         if resolved_target not in df.columns:
             raise ValueError(f"Target column '{resolved_target}' was not found.")
 
+        df = self._clean(df, resolved_target)
         inferred_task = task_type or self._infer_task(df[resolved_target])
         profile = self._profile(df, resolved_target, inferred_task)
         X = df.drop(columns=[resolved_target])
@@ -80,6 +81,30 @@ class DataAgent(BaseAgent):
         if target not in df.columns:
             df[target] = raw.target
         return df, dataset, target, task_type  # type: ignore[return-value]
+
+    def _clean(self, df: pd.DataFrame, target: str) -> pd.DataFrame:
+        cleaned = df.dropna(subset=[target])
+        if len(cleaned) < len(df):
+            self.log(f"Dropped {len(df) - len(cleaned)} rows with a missing target value.")
+        before = len(cleaned)
+        cleaned = cleaned.drop_duplicates()
+        if len(cleaned) < before:
+            self.log(f"Dropped {before - len(cleaned)} duplicate rows.")
+
+        feature_columns = [column for column in cleaned.columns if column != target]
+        constant = [column for column in feature_columns if cleaned[column].nunique(dropna=False) <= 1]
+        id_like = [
+            column
+            for column in feature_columns
+            if column not in constant
+            and not pd.api.types.is_numeric_dtype(cleaned[column])
+            and cleaned[column].nunique(dropna=True) == len(cleaned)
+        ]
+        uninformative = constant + id_like
+        if uninformative:
+            cleaned = cleaned.drop(columns=uninformative)
+            self.log(f"Dropped uninformative columns: {', '.join(uninformative)}.")
+        return cleaned
 
     def _infer_task(self, target: pd.Series) -> TaskType:
         if not pd.api.types.is_numeric_dtype(target):

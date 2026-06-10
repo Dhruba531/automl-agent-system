@@ -46,6 +46,8 @@ class CandidateResult:
     estimator: Any
     metrics: Dict[str, float]
     train_seconds: float
+    # Mean cross-validation score in sklearn scorer convention (higher is better).
+    cv_score: Optional[float] = None
     error: Optional[str] = None
 
 

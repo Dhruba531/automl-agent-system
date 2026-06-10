@@ -70,6 +70,10 @@ class AutoMLOrchestrator:
         return report
 
     def _choose_final(self, original, tuned, task_type: TaskType):
+        if tuned is original:
+            return original
+        if original.cv_score is not None and tuned.cv_score is not None:
+            return tuned if tuned.cv_score >= original.cv_score else original
         metric = self.evaluation_agent.primary_metric(task_type)
         original_score = original.metrics[metric]
         tuned_score = tuned.metrics.get(metric, original_score)
@@ -98,6 +102,7 @@ class AutoMLOrchestrator:
             {
                 "name": result.name,
                 "metrics": result.metrics,
+                "cv_score": result.cv_score,
                 "train_seconds": result.train_seconds,
                 "error": result.error,
             }

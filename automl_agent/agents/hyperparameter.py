@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from sklearn.base import clone
-from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor, RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    ExtraTreesRegressor,
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
+    RandomForestClassifier,
+    RandomForestRegressor,
+)
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, KFold, cross_val_score
 from sklearn.pipeline import Pipeline
@@ -35,8 +42,7 @@ class HyperparameterAgent(BaseAgent):
             return self._tune_with_random_search(best, data, features)
 
     def _tune_with_optuna(self, optuna, best: CandidateResult, data: DataBundle, features: FeaturePlan) -> CandidateResult:
-        direction = "maximize" if data.task_type == "classification" else "minimize"
-        scoring = "f1_macro" if data.task_type == "classification" else "neg_root_mean_squared_error"
+        scoring = self.evaluator.scoring(data.task_type)
         cv = self._cv(data)
 
         def objective(trial):
@@ -48,10 +54,9 @@ class HyperparameterAgent(BaseAgent):
                 ]
             )
             scores = cross_val_score(pipeline, data.X_train, data.y_train, cv=cv, scoring=scoring, n_jobs=1)
-            mean_score = float(scores.mean())
-            return mean_score if data.task_type == "classification" else -mean_score
+            return float(scores.mean())
 
-        study = optuna.create_study(direction=direction, sampler=optuna.samplers.TPESampler(seed=self.random_state))
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=self.random_state))
         study.optimize(objective, n_trials=self.trials, show_progress_bar=False)
         tuned_estimator = self._estimator_from_params(best.name, data.task_type, study.best_params)
         pipeline = Pipeline(
@@ -62,6 +67,7 @@ class HyperparameterAgent(BaseAgent):
         )
         pipeline.fit(data.X_train, data.y_train)
         tuned = self.evaluator.evaluate(f"{best.name}_tuned", pipeline, data)
+        tuned.cv_score = float(study.best_value)
         tuned.train_seconds = best.train_seconds
         self.log(f"Tuned {best.name} with Optuna over {self.trials} trials.")
         return tuned
@@ -76,18 +82,18 @@ class HyperparameterAgent(BaseAgent):
                 ("model", clone(best.estimator.named_steps["model"])),
             ]
         )
-        scoring = "f1_macro" if data.task_type == "classification" else "neg_root_mean_squared_error"
         search = RandomizedSearchCV(
             pipeline,
             param_distributions=params,
             n_iter=min(self.trials, 12),
-            scoring=scoring,
+            scoring=self.evaluator.scoring(data.task_type),
             cv=self._cv(data),
             random_state=self.random_state,
             n_jobs=1,
         )
         search.fit(data.X_train, data.y_train)
         tuned = self.evaluator.evaluate(f"{best.name}_tuned", search.best_estimator_, data)
+        tuned.cv_score = float(search.best_score_)
         self.log(f"Tuned {best.name} with RandomizedSearchCV.")
         return tuned
 
@@ -122,6 +128,13 @@ class HyperparameterAgent(BaseAgent):
                 "max_depth": trial.suggest_int("max_depth", 2, 24),
                 "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 8),
             }
+        if name == "hist_gradient_boosting":
+            return {
+                "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.5, log=True),
+                "max_iter": trial.suggest_int("max_iter", 80, 400),
+                "max_leaf_nodes": trial.suggest_int("max_leaf_nodes", 15, 63),
+                "l2_regularization": trial.suggest_float("l2_regularization", 0.001, 10.0, log=True),
+            }
         return {}
 
     def _estimator_from_params(self, name: str, task_type: str, params: dict):
@@ -141,6 +154,10 @@ class HyperparameterAgent(BaseAgent):
             return ExtraTreesClassifier(random_state=42, n_jobs=-1, **params)
         if name == "extra_trees":
             return ExtraTreesRegressor(random_state=42, n_jobs=-1, **params)
+        if name == "hist_gradient_boosting" and task_type == "classification":
+            return HistGradientBoostingClassifier(random_state=42, **params)
+        if name == "hist_gradient_boosting":
+            return HistGradientBoostingRegressor(random_state=42, **params)
         raise ValueError(f"Unsupported estimator for tuning: {name}")
 
     def _random_search_space(self, name: str, task_type: str) -> dict:
@@ -149,6 +166,12 @@ class HyperparameterAgent(BaseAgent):
                 "model__n_estimators": [80, 120, 200, 320],
                 "model__max_depth": [None, 4, 8, 16, 24],
                 "model__min_samples_leaf": [1, 2, 4, 8],
+            }
+        if name == "hist_gradient_boosting":
+            return {
+                "model__learning_rate": [0.03, 0.1, 0.3],
+                "model__max_iter": [100, 200, 300],
+                "model__max_leaf_nodes": [15, 31, 63],
             }
         if name in {"svc_rbf", "svr_rbf"}:
             return {"model__C": [0.1, 1.0, 10.0, 50.0], "model__gamma": ["scale", 0.01, 0.001]}

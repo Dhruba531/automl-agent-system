@@ -44,9 +44,8 @@ class FeatureAgent(BaseAgent):
             transformers.append(("categorical", categorical, plan.categorical_features))
         return ColumnTransformer(transformers=transformers, remainder="drop")
 
-    def _one_hot_encoder(self) -> OneHotEncoder:
-        try:
-            return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-        except TypeError:
-            return OneHotEncoder(handle_unknown="ignore", sparse=False)
+    def _one_hot_encoder(self, max_categories: int = 32) -> OneHotEncoder:
+        # max_categories groups rare levels of high-cardinality columns into an
+        # infrequent bucket so one-hot encoding cannot explode the feature space.
+        return OneHotEncoder(handle_unknown="infrequent_if_exist", sparse_output=False, max_categories=max_categories)
 
