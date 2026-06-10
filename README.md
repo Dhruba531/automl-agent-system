@@ -177,6 +177,17 @@ orchestrator = AutoMLOrchestrator(llm_connector=connector)
 
 Any object with a `chat(messages) -> str` method works as a connector, so other OpenAI-compatible backends can be swapped in.
 
+### Custom Prompt
+
+Steer the summary with `--prompt` to focus the model on what matters to you:
+
+```bash
+automl-agent run --dataset breast_cancer \
+  --prompt "Explain the result for a non-technical stakeholder and flag deployment risks."
+```
+
+The instruction is appended to the run context the Insight Agent sends to the model, so the LLM keeps the leaderboard and feature facts but follows your steer. Pass `--prompt @path/to/prompt.txt` to read a longer prompt from a file. The same text can be supplied programmatically via `AutoMLOrchestrator.run(..., user_prompt=...)`.
+
 ## RunPod Connector
 
 If you don't have a local GPU, the same insight summaries can run on [RunPod](https://docs.runpod.io) serverless GPU workers. Deploy a serverless vLLM endpoint from the RunPod console, then:

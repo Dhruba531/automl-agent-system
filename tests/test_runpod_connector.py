@@ -1,9 +1,10 @@
 import json
+from pathlib import Path
 
 import httpx
 import pytest
 
-from automl_agent.cli import _build_llm_connector, build_parser
+from automl_agent.cli import _build_llm_connector, _resolve_user_prompt, build_parser
 from automl_agent.llm import RunPodConfig, RunPodConnector, VLLMConnector
 
 
@@ -82,3 +83,17 @@ def test_cli_runpod_flag_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> No
     args = build_parser().parse_args(["run", "--runpod-endpoint-id", "abc123"])
     with pytest.raises(SystemExit):
         _build_llm_connector(args)
+
+
+def test_resolve_user_prompt_inline_and_file(tmp_path: Path) -> None:
+    assert _resolve_user_prompt(None) is None
+    assert _resolve_user_prompt("focus on risks") == "focus on risks"
+
+    prompt_file = tmp_path / "prompt.txt"
+    prompt_file.write_text("summarize for executives", encoding="utf-8")
+    assert _resolve_user_prompt(f"@{prompt_file}") == "summarize for executives"
+
+
+def test_resolve_user_prompt_missing_file_errors() -> None:
+    with pytest.raises(SystemExit):
+        _resolve_user_prompt("@/nonexistent/prompt.txt")

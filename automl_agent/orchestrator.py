@@ -38,6 +38,7 @@ class AutoMLOrchestrator:
         csv_path: Optional[Path] = None,
         target: Optional[str] = None,
         task_type: Optional[TaskType] = None,
+        user_prompt: Optional[str] = None,
     ) -> PipelineReport:
         output_dir.mkdir(parents=True, exist_ok=True)
         data = self.data_agent.load(dataset=dataset, csv_path=csv_path, target=target, task_type=task_type)
@@ -55,7 +56,9 @@ class AutoMLOrchestrator:
             explainability=explainability,
             monitoring_baseline=monitoring_baseline,
         )
-        llm_summary = self.insight_agent.summarize(data, leaderboard, final_best, explainability)
+        llm_summary = self.insight_agent.summarize(
+            data, leaderboard, final_best, explainability, user_prompt=user_prompt
+        )
         if llm_summary:
             (output_dir / "llm_summary.md").write_text(llm_summary, encoding="utf-8")
 

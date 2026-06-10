@@ -25,11 +25,12 @@ class InsightAgent(BaseAgent):
         leaderboard: List[CandidateResult],
         best: CandidateResult,
         explainability: Optional[ExplainabilityReport] = None,
+        user_prompt: Optional[str] = None,
     ) -> Optional[str]:
         if self.connector is None:
             self.log("No LLM connector configured; skipping insight summary.")
             return None
-        prompt = self._prompt(data, leaderboard, best, explainability)
+        prompt = self._prompt(data, leaderboard, best, explainability, user_prompt)
         try:
             summary = self.connector.chat(
                 [
@@ -56,6 +57,7 @@ class InsightAgent(BaseAgent):
         leaderboard: List[CandidateResult],
         best: CandidateResult,
         explainability: Optional[ExplainabilityReport],
+        user_prompt: Optional[str] = None,
     ) -> str:
         profile = data.profile
         lines = [
@@ -75,4 +77,8 @@ class InsightAgent(BaseAgent):
             lines.append("Top features by permutation importance:")
             for importance in explainability.importances[:8]:
                 lines.append(f"- {importance.feature}: {importance.importance_mean:.4f}")
+        if user_prompt and user_prompt.strip():
+            lines.append("")
+            lines.append("Additional instructions from the user (prioritize these):")
+            lines.append(user_prompt.strip())
         return "\n".join(lines)

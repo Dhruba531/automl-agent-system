@@ -90,3 +90,26 @@ def test_pipeline_survives_llm_failure(tmp_path: Path) -> None:
     assert report.llm_summary is None
     assert not (tmp_path / "llm_summary.md").exists()
     assert any("LLM summary failed" in note for note in report.notes)
+
+
+def test_user_prompt_is_passed_to_llm(tmp_path: Path) -> None:
+    connector = _FakeConnector()
+    orchestrator = AutoMLOrchestrator(max_workers=2, tuning_trials=0, llm_connector=connector)
+    orchestrator.run(
+        output_dir=tmp_path,
+        dataset="iris",
+        user_prompt="Explain the result for a non-technical stakeholder.",
+    )
+
+    prompt = connector.calls[0][1]["content"]
+    assert "Additional instructions from the user" in prompt
+    assert "non-technical stakeholder" in prompt
+
+
+def test_blank_user_prompt_is_ignored(tmp_path: Path) -> None:
+    connector = _FakeConnector()
+    orchestrator = AutoMLOrchestrator(max_workers=2, tuning_trials=0, llm_connector=connector)
+    orchestrator.run(output_dir=tmp_path, dataset="iris", user_prompt="   ")
+
+    prompt = connector.calls[0][1]["content"]
+    assert "Additional instructions from the user" not in prompt

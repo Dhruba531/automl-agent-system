@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--runpod-endpoint-id",
         help="RunPod serverless vLLM endpoint id (defaults to RUNPOD_ENDPOINT_ID; requires RUNPOD_API_KEY).",
     )
+    run.add_argument(
+        "--prompt",
+        help="Custom instruction to steer the LLM insight summary. "
+        "Prefix with '@' to read the prompt from a file (e.g. --prompt @notes.txt).",
+    )
 
     registry = subparsers.add_parser("registry", help="List model versions in a local registry.")
     registry.add_argument("--path", type=Path, default=Path("artifacts/registry.json"), help="Path to registry JSON.")
@@ -43,6 +48,17 @@ def build_parser() -> argparse.ArgumentParser:
     harness.add_argument("--trials", type=int, default=0, help="Default tuning trials for dataset cases.")
     harness.add_argument("--fail-fast", action="store_true", help="Stop after the first failed case.")
     return parser
+
+
+def _resolve_user_prompt(prompt: Optional[str]) -> Optional[str]:
+    if not prompt:
+        return None
+    if prompt.startswith("@"):
+        prompt_path = Path(prompt[1:])
+        if not prompt_path.is_file():
+            raise SystemExit(f"Prompt file not found: {prompt_path}")
+        return prompt_path.read_text(encoding="utf-8")
+    return prompt
 
 
 def _build_llm_connector(args: argparse.Namespace) -> Optional[VLLMConnector]:
@@ -72,6 +88,7 @@ def _build_llm_connector(args: argparse.Namespace) -> Optional[VLLMConnector]:
 def main(argv: Optional[list[str]] = None) -> None:
     args = build_parser().parse_args(argv)
     if args.command == "run":
+        user_prompt = _resolve_user_prompt(args.prompt)
         connector = _build_llm_connector(args)
         orchestrator = AutoMLOrchestrator(max_workers=args.workers, tuning_trials=args.trials, llm_connector=connector)
         try:
@@ -81,6 +98,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                 csv_path=args.csv,
                 target=args.target,
                 task_type=args.task,
+                user_prompt=user_prompt,
             )
         finally:
             if connector:
