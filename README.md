@@ -177,6 +177,37 @@ orchestrator = AutoMLOrchestrator(llm_connector=connector)
 
 Any object with a `chat(messages) -> str` method works as a connector, so other OpenAI-compatible backends can be swapped in.
 
+## RunPod Connector
+
+If you don't have a local GPU, the same insight summaries can run on [RunPod](https://docs.runpod.io) serverless GPU workers. Deploy a serverless vLLM endpoint from the RunPod console, then:
+
+```bash
+export RUNPOD_ENDPOINT_ID=your-endpoint-id
+export RUNPOD_API_KEY=your-runpod-api-key
+automl-agent run --dataset breast_cancer --output artifacts/breast_cancer
+```
+
+The connector talks to the endpoint's OpenAI-compatible route (`https://api.runpod.ai/v2/<endpoint_id>/openai/v1`) and otherwise behaves exactly like the vLLM connector, including model auto-discovery and writing `llm_summary.md`.
+
+Configuration:
+
+- `RUNPOD_ENDPOINT_ID` (or `--runpod-endpoint-id`) selects the serverless endpoint.
+- `RUNPOD_API_KEY` authenticates; it is always read from the environment, never from flags.
+- `RUNPOD_MODEL` (or `--llm-model`) selects a model; defaults to the first model the worker lists.
+- `RUNPOD_MAX_TOKENS`, `RUNPOD_TEMPERATURE`, `RUNPOD_TIMEOUT_SECONDS` tune the request (the timeout defaults to 120s to absorb cold starts).
+
+When both are configured, a local `VLLM_BASE_URL` takes priority over RunPod.
+
+Programmatic use:
+
+```python
+from automl_agent.llm import RunPodConfig, RunPodConnector
+from automl_agent.orchestrator import AutoMLOrchestrator
+
+connector = RunPodConnector(RunPodConfig(endpoint_id="your-endpoint-id", api_key="..."))
+orchestrator = AutoMLOrchestrator(llm_connector=connector)
+```
+
 ## CSV Usage
 
 ```bash

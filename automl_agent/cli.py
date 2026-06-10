@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
 from automl_agent.harness import ExperimentHarness, HarnessCase
-from automl_agent.llm import VLLMConfig, VLLMConnector
+from automl_agent.llm import RunPodConfig, RunPodConnector, VLLMConfig, VLLMConnector
 from automl_agent.orchestrator import AutoMLOrchestrator
 from automl_agent.registry import ModelRegistry
 
@@ -25,7 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--workers", type=int, default=4, help="Parallel candidate training workers.")
     run.add_argument("--trials", type=int, default=20, help="Optuna tuning trials. Use 0 to skip tuning.")
     run.add_argument("--llm-base-url", help="vLLM OpenAI-compatible base URL (defaults to VLLM_BASE_URL).")
-    run.add_argument("--llm-model", help="Model name served by vLLM (defaults to VLLM_MODEL or the first served model).")
+    run.add_argument("--llm-model", help="Model name to use (defaults to VLLM_MODEL/RUNPOD_MODEL or the first served model).")
+    run.add_argument(
+        "--runpod-endpoint-id",
+        help="RunPod serverless vLLM endpoint id (defaults to RUNPOD_ENDPOINT_ID; requires RUNPOD_API_KEY).",
+    )
 
     registry = subparsers.add_parser("registry", help="List model versions in a local registry.")
     registry.add_argument("--path", type=Path, default=Path("artifacts/registry.json"), help="Path to registry JSON.")
@@ -45,9 +50,23 @@ def _build_llm_connector(args: argparse.Namespace) -> Optional[VLLMConnector]:
     if args.llm_base_url:
         config = config or VLLMConfig()
         config.base_url = args.llm_base_url
-    if config and args.llm_model:
-        config.model = args.llm_model
-    return VLLMConnector(config) if config else None
+    if config:
+        if args.llm_model:
+            config.model = args.llm_model
+        return VLLMConnector(config)
+
+    runpod = RunPodConfig.from_env()
+    if args.runpod_endpoint_id:
+        api_key = os.environ.get("RUNPOD_API_KEY")
+        if not api_key:
+            raise SystemExit("--runpod-endpoint-id requires the RUNPOD_API_KEY environment variable.")
+        runpod = runpod or RunPodConfig(endpoint_id=args.runpod_endpoint_id, api_key=api_key)
+        runpod.endpoint_id = args.runpod_endpoint_id
+    if runpod:
+        if args.llm_model:
+            runpod.model = args.llm_model
+        return RunPodConnector(runpod)
+    return None
 
 
 def main(argv: Optional[list[str]] = None) -> None:
