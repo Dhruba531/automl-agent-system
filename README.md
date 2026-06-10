@@ -140,6 +140,44 @@ Harness outputs:
 - `summary.md` is a readable leaderboard.
 - Each case gets its own full AutoML artifact directory.
 
+## Paper-to-Code Agent
+
+The Paper-to-Code Agent converts an academic paper into a runnable code project. It
+drives the **Claude Code CLI in headless mode**, so generation is billed against your
+signed-in Claude subscription rather than a metered `ANTHROPIC_API_KEY`.
+
+Prerequisites: install [Claude Code](https://code.claude.com/docs) and sign in
+(`claude` must be on your `PATH`).
+
+Convert a local paper (PDF, Markdown, or text), an arXiv id/URL, or raw text:
+
+```bash
+# From a local file (PDF needs the optional 'paper' extra: pip install -e ".[paper]")
+automl-agent paper2code path/to/paper.pdf --output artifacts/paper2code
+
+# From an arXiv id (downloads the PDF)
+automl-agent paper2code 2410.02958 --output artifacts/automl_agent_paper
+
+# Choose a model and project name
+automl-agent paper2code paper.md --model opus --name my_impl --output artifacts/my_impl
+```
+
+Useful flags:
+
+- `--model` selects a Claude model alias or id (`opus`, `sonnet`, ...). Omit to use the subscription default.
+- `--language` targets a language other than Python.
+- `--max-chars` caps how much of the paper is sent (default 120k characters).
+- `--overwrite` replaces existing files in the output directory.
+
+Outputs in the project directory:
+
+- The generated source tree (README, modules, an entry point, and tests).
+- `paper2code_manifest.json` lists generated files, the paper source, and agent notes.
+- `paper2code_raw_response.txt` preserves Claude's raw response for inspection.
+
+The model is asked to emit files using an unambiguous delimiter format, so responses are
+parsed deterministically and unsafe paths (absolute or `..`) are rejected.
+
 ## CSV Usage
 
 ```bash

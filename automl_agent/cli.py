@@ -7,6 +7,7 @@ from typing import Optional
 
 from automl_agent.harness import ExperimentHarness, HarnessCase
 from automl_agent.orchestrator import AutoMLOrchestrator
+from automl_agent.paper2code import PaperToCodeAgent
 from automl_agent.registry import ModelRegistry
 
 
@@ -34,6 +35,18 @@ def build_parser() -> argparse.ArgumentParser:
     harness.add_argument("--workers", type=int, default=2, help="Default worker count for dataset cases.")
     harness.add_argument("--trials", type=int, default=0, help="Default tuning trials for dataset cases.")
     harness.add_argument("--fail-fast", action="store_true", help="Stop after the first failed case.")
+
+    paper2code = subparsers.add_parser(
+        "paper2code",
+        help="Convert a paper (file, arXiv id, or text) into a code project using your Claude subscription.",
+    )
+    paper2code.add_argument("source", help="Paper source: a .pdf/.md/.txt path, an arXiv id/URL, or raw text.")
+    paper2code.add_argument("--output", type=Path, default=Path("artifacts/paper2code"), help="Output project directory.")
+    paper2code.add_argument("--name", help="Project name. Defaults to a slug of the paper title.")
+    paper2code.add_argument("--language", default="Python", help="Target implementation language.")
+    paper2code.add_argument("--model", help="Claude model alias or id (e.g. 'opus', 'sonnet'). Defaults to subscription default.")
+    paper2code.add_argument("--max-chars", type=int, default=120_000, help="Max paper characters sent to Claude.")
+    paper2code.add_argument("--overwrite", action="store_true", help="Overwrite existing files in the output directory.")
     return parser
 
 
@@ -82,6 +95,28 @@ def main(argv: Optional[list[str]] = None) -> None:
                     "failed": sum(1 for result in results if result.status == "failed"),
                     "results": str(harness.output_dir / "results.json"),
                     "summary": str(harness.output_dir / "summary.md"),
+                },
+                indent=2,
+            )
+        )
+    elif args.command == "paper2code":
+        agent = PaperToCodeAgent(language=args.language, model=args.model)
+        result = agent.convert(
+            source=args.source,
+            output_dir=args.output,
+            project_name=args.name,
+            max_chars=args.max_chars,
+            overwrite=args.overwrite,
+        )
+        print(
+            json.dumps(
+                {
+                    "project_name": result.project_name,
+                    "paper_title": result.paper_title,
+                    "paper_source": result.paper_source,
+                    "output_dir": str(result.output_dir),
+                    "files": result.files,
+                    "manifest": str(result.output_dir / "paper2code_manifest.json"),
                 },
                 indent=2,
             )

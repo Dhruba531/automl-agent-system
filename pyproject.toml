@@ -24,6 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+paper = ["pypdf>=4.0"]
 
 [project.scripts]
 automl-agent = "automl_agent.cli:main"
