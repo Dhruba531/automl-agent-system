@@ -101,3 +101,18 @@ def test_agent_raises_when_no_files_returned(tmp_path: Path) -> None:
     agent = PaperToCodeAgent(client=StubClaude("no file blocks here"))
     with pytest.raises(ValueError):
         agent.convert("Some title\n\nbody", tmp_path)
+    assert (tmp_path / "paper2code_raw_response.txt").read_text(encoding="utf-8") == "no file blocks here"
+
+
+def test_agent_handles_relative_output_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    agent = PaperToCodeAgent(client=StubClaude(CANNED_RESPONSE))
+    result = agent.convert("A Toy Paper\n\nMethod.", Path("artifacts/demo"))
+    assert set(result.files) >= {"README.md", "src/model.py"}
+    assert (tmp_path / "artifacts" / "demo" / "README.md").exists()
+
+
+def test_inline_text_citing_arxiv_url_stays_inline() -> None:
+    paper = load_paper("Our Method Title\n\nWe build on prior work (arxiv.org/abs/1706.03762).")
+    assert paper.source == "inline-text"
+    assert "prior work" in paper.text

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -51,7 +50,6 @@ class ClaudeClient:
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                env={**os.environ},
             )
         except FileNotFoundError as exc:  # pragma: no cover - defensive
             raise ClaudeUnavailableError(str(exc)) from exc

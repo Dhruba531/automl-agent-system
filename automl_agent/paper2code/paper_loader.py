@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -50,9 +51,12 @@ def _arxiv_id(source: str) -> Optional[str]:
     match = ARXIV_ID.match(candidate)
     if match:
         return match.group(2)
-    url_match = re.search(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})", candidate, re.IGNORECASE)
-    if url_match:
-        return url_match.group(1)
+    # Only treat single-token sources as URLs; inline paper text often *cites*
+    # arXiv links and must not trigger a download of the cited paper.
+    if not re.search(r"\s", candidate):
+        url_match = re.search(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})", candidate, re.IGNORECASE)
+        if url_match:
+            return url_match.group(1)
     return None
 
 
@@ -71,12 +75,10 @@ def _load_arxiv(arxiv_id: str, *, max_chars: int) -> LoadedPaper:
     except Exception as exc:  # pragma: no cover - network dependent
         raise RuntimeError(f"Could not download arXiv paper {arxiv_id}: {exc}") from exc
 
-    tmp = Path.cwd() / f".paper2code_{arxiv_id}.pdf"
-    try:
+    with tempfile.TemporaryDirectory(prefix="paper2code_") as tmp_dir:
+        tmp = Path(tmp_dir) / f"{arxiv_id}.pdf"
         tmp.write_bytes(response.content)
         text = _truncate(_extract_pdf(tmp), max_chars)
-    finally:
-        tmp.unlink(missing_ok=True)
     return LoadedPaper(title=_guess_title(text) or f"arXiv:{arxiv_id}", text=text, source=f"arxiv:{arxiv_id}")
 
 

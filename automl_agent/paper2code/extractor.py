@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import List
+from typing import List, Optional
 
 from automl_agent.paper2code.prompts import FILE_END
 
@@ -24,7 +24,7 @@ def extract_files(response: str) -> List[GeneratedFile]:
     (absolute, parent traversal) are rejected.
     """
     files: List[GeneratedFile] = []
-    current_path: str | None = None
+    current_path: Optional[str] = None
     current_lines: List[str] = []
 
     for raw_line in response.splitlines():

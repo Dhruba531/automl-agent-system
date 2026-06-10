@@ -66,6 +66,12 @@ class PaperToCodeAgent(BaseAgent):
         self.log("Requesting implementation from Claude.")
         response = self.client.complete(prompt, system_prompt=SYSTEM_PROMPT)
 
+        # Resolve so written paths (resolved by _write_files) stay relative_to-compatible
+        # even when callers pass a relative or symlinked output directory.
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "paper2code_raw_response.txt").write_text(response, encoding="utf-8")
+
         files = extract_files(response)
         if not files:
             raise ValueError(
@@ -74,9 +80,8 @@ class PaperToCodeAgent(BaseAgent):
             )
         self.log(f"Parsed {len(files)} generated file(s) from the response.")
 
-        output_dir.mkdir(parents=True, exist_ok=True)
         written = self._write_files(files, output_dir, overwrite=overwrite)
-        (output_dir / "paper2code_raw_response.txt").write_text(response, encoding="utf-8")
+        self.log(f"Wrote {len(written)} file(s) to {output_dir}.")
 
         result = PaperToCodeResult(
             project_name=resolved_name,
@@ -87,16 +92,16 @@ class PaperToCodeAgent(BaseAgent):
             notes=[f"{event.agent}: {event.message}" for event in self.events],
         )
         self._write_manifest(result, paper, output_dir)
-        self.log(f"Wrote {len(written)} file(s) to {output_dir}.")
         return result
 
     def _write_files(
         self, files: List[GeneratedFile], output_dir: Path, *, overwrite: bool
     ) -> List[Path]:
+        root = output_dir.resolve()
         written: List[Path] = []
         for generated in files:
-            destination = (output_dir / generated.path).resolve()
-            if output_dir.resolve() not in destination.parents and destination != output_dir.resolve():
+            destination = (root / generated.path).resolve()
+            if destination == root or not destination.is_relative_to(root):
                 raise ValueError(f"Refusing to write outside output dir: {generated.path}")
             if destination.exists() and not overwrite:
                 self.log(f"Skipping existing file (use overwrite): {generated.path}")
