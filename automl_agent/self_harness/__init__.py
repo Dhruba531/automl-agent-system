@@ -16,6 +16,7 @@ from automl_agent.self_harness.evidence import (
     evaluate,
 )
 from automl_agent.self_harness.loop import SelfHarness, SelfHarnessResult
+from automl_agent.self_harness.memory import HarnessMemory
 from automl_agent.self_harness.proposer import HarnessProposer
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "build_evidence_bundle",
     "evaluate",
     "HarnessProposer",
+    "HarnessMemory",
     "SelfHarness",
     "SelfHarnessResult",
 ]

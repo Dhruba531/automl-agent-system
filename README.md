@@ -262,6 +262,17 @@ Outputs:
 
 The proposer reuses the same LLM backends as the Insight Agent — set `VLLM_BASE_URL` (or `--llm-base-url`), or `RUNPOD_ENDPOINT_ID` + `RUNPOD_API_KEY`, to let a model generate the edits. With no connector configured, the deterministic proposer keeps the loop fully runnable on CPU.
 
+### Memory (improvement that accumulates across runs)
+
+By default each run starts from a fresh harness and re-explores. Pass `--memory` to persist progress so improvement compounds:
+
+```bash
+automl-agent self-harness --config examples/self_harness.json \
+  --output artifacts/self_harness --memory artifacts/harness_memory.json
+```
+
+The memory file stores the current best `HarnessConfig`, every edit ever attempted with its outcome, and a per-run history. On the next run the loop **resumes from the stored harness** and **skips edits it has already tried**, so it keeps building on past gains instead of restarting — the persistent analogue of the paper's "summaries of previously attempted edits." The run output reports `resumed_from_memory`. Use `--reset-memory` to start fresh while still recording to the file.
+
 ## CSV Usage
 
 ```bash

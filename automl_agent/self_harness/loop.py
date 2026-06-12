@@ -25,6 +25,7 @@ from automl_agent.self_harness.evidence import (
     build_evidence_bundle,
     evaluate,
 )
+from automl_agent.self_harness.memory import HarnessMemory
 from automl_agent.self_harness.proposer import HarnessProposer
 
 
@@ -61,6 +62,7 @@ class SelfHarnessResult:
     total_in: int
     total_ho: int
     rounds: List[RoundRecord]
+    resumed_from_memory: bool = False
 
 
 class SelfHarness:
@@ -86,10 +88,22 @@ class SelfHarness:
         self.rounds = rounds
         self.max_workers = max_workers
 
-    def run(self, initial: Optional[HarnessConfig] = None) -> SelfHarnessResult:
-        config = initial or HarnessConfig()
+    def run(
+        self,
+        initial: Optional[HarnessConfig] = None,
+        memory: Optional[HarnessMemory] = None,
+    ) -> SelfHarnessResult:
+        # Memory provides the starting harness and the edits already tried, so a
+        # resumed run continues improving instead of re-exploring from scratch.
+        resumed = memory is not None and not memory.is_empty()
+        if initial is not None:
+            config = initial
+        elif memory is not None:
+            config = memory.config
+        else:
+            config = HarnessConfig()
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        attempted: set = set()
+        attempted: set = set(memory.attempted_keys()) if memory is not None else set()
         round_records: List[RoundRecord] = []
 
         initial_in = self._eval(config, self.held_in, 0, "in")
@@ -150,8 +164,9 @@ class SelfHarness:
             record.config_after = config.to_dict()
             round_records.append(record)
 
+        start_config = initial if initial is not None else (memory.config if memory is not None else HarnessConfig())
         result = SelfHarnessResult(
-            initial_config=(initial or HarnessConfig()).to_dict(),
+            initial_config=start_config.to_dict(),
             final_config=config.to_dict(),
             initial_passed_in=initial_in.passed,
             final_passed_in=passed_in,
@@ -160,8 +175,12 @@ class SelfHarness:
             total_in=initial_in.total,
             total_ho=initial_ho.total,
             rounds=round_records,
+            resumed_from_memory=resumed,
         )
         self._write(result)
+        if memory is not None:
+            memory.update(result)
+            memory.save()
         return result
 
     def _eval(self, config: HarnessConfig, cases: List[HarnessCase], round_index: int, tag: str) -> SplitResult:

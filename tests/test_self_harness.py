@@ -6,6 +6,7 @@ from automl_agent.self_harness import (
     HarnessCase,
     HarnessConfig,
     HarnessEdit,
+    HarnessMemory,
     HarnessProposer,
     SelfHarness,
     build_evidence_bundle,
@@ -143,6 +144,61 @@ def test_loop_rejects_edit_that_regresses_other_split(tmp_path: Path, monkeypatc
 def test_loop_requires_held_out() -> None:
     with pytest.raises(ValueError):
         SelfHarness([HarnessCase("a", 0.9, dataset="iris")], [], Path("/tmp/x"))
+
+
+# ----------------------------------------------------------------- memory
+def test_memory_roundtrip(tmp_path: Path) -> None:
+    path = tmp_path / "mem.json"
+    memory = HarnessMemory(path=path)
+    memory.config = HarnessConfig(enabled_extra_candidates=frozenset({"gradient_boosting"}), cv_splits=5)
+    memory.attempts.append({"op": "enable_candidate", "value": "knn", "accepted": False, "delta_in": 0, "delta_ho": 0})
+    memory.save()
+
+    loaded = HarnessMemory.load(path)
+    assert loaded.config.enabled_extra_candidates == frozenset({"gradient_boosting"})
+    assert loaded.config.cv_splits == 5
+    assert loaded.attempted_keys() == {("enable_candidate", "knn")}
+
+
+def test_load_missing_memory_is_empty(tmp_path: Path) -> None:
+    memory = HarnessMemory.load(tmp_path / "absent.json")
+    assert memory.is_empty()
+    assert memory.config == HarnessConfig()
+
+
+def test_loop_resumes_from_memory_and_accumulates(tmp_path: Path, monkeypatch) -> None:
+    held_in = [HarnessCase("hard", pass_threshold=0.95, dataset="iris")]
+    held_out = [HarnessCase("safe", pass_threshold=0.10, dataset="wine")]
+
+    def fake_evaluate(config, cases, workdir, max_workers=2):
+        if cases[0].name == "hard":
+            return _make_split(cases, lambda c: "gradient_boosting" in config.enabled_extra_candidates)
+        return _make_split(cases, lambda c: True)
+
+    monkeypatch.setattr(loop_module, "evaluate", fake_evaluate)
+    mem_path = tmp_path / "mem.json"
+
+    # First run: empty memory, accepts the booster, persists it.
+    memory = HarnessMemory.load(mem_path)
+    loop = SelfHarness(held_in, held_out, tmp_path / "r1", proposal_width=2, rounds=1)
+    first = loop.run(memory=memory)
+    assert first.resumed_from_memory is False
+    assert "gradient_boosting" in memory.config.enabled_extra_candidates
+    assert mem_path.exists()
+    attempts_after_first = len(memory.attempts)
+
+    # Second run: reload memory -> starts already-improved and skips tried edits.
+    memory2 = HarnessMemory.load(mem_path)
+    assert "gradient_boosting" in memory2.config.enabled_extra_candidates
+    loop2 = SelfHarness(held_in, held_out, tmp_path / "r2", proposal_width=2, rounds=1)
+    second = loop2.run(memory=memory2)
+    assert second.resumed_from_memory is True
+    # Resumes from the improved harness: held-in already passes at the start.
+    assert second.initial_passed_in == 1
+    assert second.initial_config["enabled_extra_candidates"] == ["gradient_boosting"]
+    # History accumulates rather than resetting.
+    assert len(memory2.attempts) >= attempts_after_first
+    assert len(memory2.runs) == 2
 
 
 # --------------------------------------------------------------- real pipeline
