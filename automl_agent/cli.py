@@ -47,6 +47,21 @@ def build_parser() -> argparse.ArgumentParser:
     harness.add_argument("--workers", type=int, default=2, help="Default worker count for dataset cases.")
     harness.add_argument("--trials", type=int, default=0, help="Default tuning trials for dataset cases.")
     harness.add_argument("--fail-fast", action="store_true", help="Stop after the first failed case.")
+
+    self_harness = subparsers.add_parser(
+        "self-harness",
+        help="Iteratively improve the AutoML harness from held-in/held-out evidence (Self-Harness).",
+    )
+    self_harness.add_argument(
+        "--config", type=Path, required=True, help="JSON config with 'held_in' and 'held_out' case arrays."
+    )
+    self_harness.add_argument("--output", type=Path, default=Path("artifacts/self_harness"), help="Output directory.")
+    self_harness.add_argument("--rounds", type=int, default=3, help="Number of improvement rounds (T).")
+    self_harness.add_argument("--width", type=int, default=3, help="Parallel proposal width (K).")
+    self_harness.add_argument("--workers", type=int, default=2, help="Workers per pipeline run.")
+    self_harness.add_argument("--llm-base-url", help="vLLM base URL for the proposer (defaults to VLLM_BASE_URL).")
+    self_harness.add_argument("--llm-model", help="Proposer model name (defaults to VLLM_MODEL/RUNPOD_MODEL).")
+    self_harness.add_argument("--runpod-endpoint-id", help="RunPod endpoint id for the proposer (requires RUNPOD_API_KEY).")
     return parser
 
 
@@ -142,6 +157,49 @@ def main(argv: Optional[list[str]] = None) -> None:
                 indent=2,
             )
         )
+    elif args.command == "self-harness":
+        _run_self_harness(args)
+
+
+def _run_self_harness(args: argparse.Namespace) -> None:
+    from automl_agent.self_harness import HarnessCase as SelfHarnessCase
+    from automl_agent.self_harness import SelfHarness
+
+    payload = json.loads(args.config.read_text(encoding="utf-8"))
+    held_in = [SelfHarnessCase.from_dict(item) for item in payload.get("held_in", [])]
+    held_out = [SelfHarnessCase.from_dict(item) for item in payload.get("held_out", [])]
+    if not held_in or not held_out:
+        raise SystemExit("Self-Harness config must define non-empty 'held_in' and 'held_out' arrays.")
+
+    connector = _build_llm_connector(args)
+    loop = SelfHarness(
+        held_in=held_in,
+        held_out=held_out,
+        output_dir=args.output,
+        connector=connector,
+        proposal_width=args.width,
+        rounds=args.rounds,
+        max_workers=args.workers,
+    )
+    try:
+        result = loop.run()
+    finally:
+        if connector:
+            connector.close()
+    print(
+        json.dumps(
+            {
+                "held_in_pass": f"{result.initial_passed_in}/{result.total_in} -> "
+                f"{result.final_passed_in}/{result.total_in}",
+                "held_out_pass": f"{result.initial_passed_ho}/{result.total_ho} -> "
+                f"{result.final_passed_ho}/{result.total_ho}",
+                "final_config": result.final_config,
+                "lineage": str(args.output / "lineage.json"),
+                "summary": str(args.output / "summary.md"),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from sklearn.base import clone
 from sklearn.ensemble import (
+    AdaBoostClassifier,
     ExtraTreesClassifier,
     ExtraTreesRegressor,
+    GradientBoostingClassifier,
+    GradientBoostingRegressor,
     HistGradientBoostingClassifier,
     HistGradientBoostingRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
 )
-from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.linear_model import Lasso, LogisticRegression, Ridge
 from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC, SVR
 
@@ -23,15 +28,75 @@ from automl_agent.agents.evaluation import EvaluationAgent
 from automl_agent.agents.feature import FeatureAgent
 from automl_agent.types import CandidateResult, DataBundle, FeaturePlan
 
+if TYPE_CHECKING:
+    from automl_agent.self_harness.config import HarnessConfig
+
+
+def _base_candidates(task_type: str) -> Dict[str, object]:
+    if task_type == "classification":
+        return {
+            "logistic_regression": LogisticRegression(max_iter=2000, class_weight="balanced"),
+            "random_forest": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
+            "extra_trees": ExtraTreesClassifier(n_estimators=120, random_state=42, n_jobs=-1),
+            "hist_gradient_boosting": HistGradientBoostingClassifier(random_state=42),
+            "svc_rbf": SVC(kernel="rbf", probability=True, class_weight="balanced"),
+        }
+    return {
+        "ridge": Ridge(),
+        "random_forest": RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1),
+        "extra_trees": ExtraTreesRegressor(n_estimators=120, random_state=42, n_jobs=-1),
+        "hist_gradient_boosting": HistGradientBoostingRegressor(random_state=42),
+        "svr_rbf": SVR(kernel="rbf"),
+    }
+
+
+def _extra_candidates(task_type: str) -> Dict[str, object]:
+    """Optional models the Self-Harness loop can enable, not used by default."""
+    if task_type == "classification":
+        return {
+            "knn": KNeighborsClassifier(),
+            "gaussian_nb": GaussianNB(),
+            "gradient_boosting": GradientBoostingClassifier(random_state=42),
+            "ada_boost": AdaBoostClassifier(random_state=42),
+        }
+    return {
+        "knn": KNeighborsRegressor(),
+        "gradient_boosting": GradientBoostingRegressor(random_state=42),
+        "lasso": Lasso(random_state=42),
+    }
+
+
+def available_candidate_names(task_type: str) -> Dict[str, str]:
+    """Map every candidate name to 'base' or 'extra' for proposer surfaces."""
+    names = {name: "base" for name in _base_candidates(task_type)}
+    names.update({name: "extra" for name in _extra_candidates(task_type)})
+    return names
+
+
+def all_extra_candidate_names() -> set:
+    """Every optional model name across task types the loop may enable."""
+    return set(_extra_candidates("classification")) | set(_extra_candidates("regression"))
+
+
+def all_base_candidate_names() -> set:
+    return set(_base_candidates("classification")) | set(_base_candidates("regression"))
+
 
 class ModelSearchAgent(BaseAgent):
     name = "Model Search Agent"
 
-    def __init__(self, max_workers: int = 4, cv_splits: int = 3, random_state: int = 42) -> None:
+    def __init__(
+        self,
+        max_workers: int = 4,
+        cv_splits: int = 3,
+        random_state: int = 42,
+        config: "Optional[HarnessConfig]" = None,
+    ) -> None:
         super().__init__()
         self.max_workers = max_workers
-        self.cv_splits = cv_splits
+        self.cv_splits = config.cv_splits if config is not None else cv_splits
         self.random_state = random_state
+        self.config = config
         self.evaluator = EvaluationAgent()
 
     def search(self, data: DataBundle, features: FeaturePlan) -> list[CandidateResult]:
@@ -92,18 +157,14 @@ class ModelSearchAgent(BaseAgent):
         return KFold(n_splits=self.cv_splits, shuffle=True, random_state=self.random_state)
 
     def _candidates(self, task_type: str) -> Dict[str, object]:
-        if task_type == "classification":
-            return {
-                "logistic_regression": LogisticRegression(max_iter=2000, class_weight="balanced"),
-                "random_forest": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
-                "extra_trees": ExtraTreesClassifier(n_estimators=120, random_state=42, n_jobs=-1),
-                "hist_gradient_boosting": HistGradientBoostingClassifier(random_state=42),
-                "svc_rbf": SVC(kernel="rbf", probability=True, class_weight="balanced"),
-            }
-        return {
-            "ridge": Ridge(),
-            "random_forest": RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1),
-            "extra_trees": ExtraTreesRegressor(n_estimators=120, random_state=42, n_jobs=-1),
-            "hist_gradient_boosting": HistGradientBoostingRegressor(random_state=42),
-            "svr_rbf": SVR(kernel="rbf"),
-        }
+        candidates = _base_candidates(task_type)
+        if self.config is not None:
+            extras = _extra_candidates(task_type)
+            for name in self.config.enabled_extra_candidates:
+                if name in extras:
+                    candidates[name] = extras[name]
+            for name in self.config.disabled_candidates:
+                candidates.pop(name, None)
+        if not candidates:
+            raise ValueError("Harness configuration disabled every candidate model.")
+        return candidates

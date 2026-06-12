@@ -29,9 +29,22 @@ class HyperparameterAgent(BaseAgent):
         self.random_state = random_state
         self.evaluator = EvaluationAgent()
 
+    TUNABLE = {
+        "logistic_regression",
+        "svc_rbf",
+        "svr_rbf",
+        "ridge",
+        "random_forest",
+        "extra_trees",
+        "hist_gradient_boosting",
+    }
+
     def tune(self, best: CandidateResult, data: DataBundle, features: FeaturePlan) -> CandidateResult:
         if self.trials <= 0:
             self.log("Skipping tuning because trials was set to 0.")
+            return best
+        if best.name not in self.TUNABLE:
+            self.log(f"Skipping tuning because '{best.name}' has no registered search space.")
             return best
         try:
             import optuna

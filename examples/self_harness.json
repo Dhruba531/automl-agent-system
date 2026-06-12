@@ -1,0 +1,9 @@
+{
+  "held_in": [
+    {"name": "iris", "dataset": "iris", "pass_threshold": 0.95},
+    {"name": "wine", "dataset": "wine", "pass_threshold": 0.97}
+  ],
+  "held_out": [
+    {"name": "breast_cancer", "dataset": "breast_cancer", "pass_threshold": 0.98}
+  ]
+}

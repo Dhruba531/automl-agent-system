@@ -13,6 +13,7 @@ The system automates the tabular ML path from dataset retrieval to deployable Fa
 - **Monitoring Agent** builds a training-data baseline for serving-time drift checks.
 - **Deployment Agent** saves the model bundle and generates a FastAPI serving module.
 - **Insight Agent** (optional) summarizes the run in natural language through a vLLM connector.
+- **Self-Harness** (optional) lets the system improve its own search configuration: it mines weaknesses from held-in datasets, proposes bounded harness edits, and promotes only those that pass a held-in/held-out regression gate (see below).
 
 The architecture notes in [`docs/DESIGN.md`](docs/DESIGN.md) describe the software engineering principles used across the project.
 
@@ -218,6 +219,48 @@ from automl_agent.orchestrator import AutoMLOrchestrator
 connector = RunPodConnector(RunPodConfig(endpoint_id="your-endpoint-id", api_key="..."))
 orchestrator = AutoMLOrchestrator(llm_connector=connector)
 ```
+
+## Self-Harness
+
+Self-Harness applies the **Self-Harness** paradigm (arXiv:2606.09498) to AutoML: instead of a human tuning the search configuration, the system improves its own *harness* — the candidate model pool, cross-validation folds, and tuning budget — from execution evidence. The loop follows Algorithm 1 of the paper:
+
+1. **Weakness Mining** — run the current harness on held-in datasets, each judged by a deterministic verifier (a `pass_threshold` on the cross-validated score). Failures are clustered by an evaluator-grounded signature (verifier cause, agent mechanism, scope) into ordered failure patterns.
+2. **Harness Proposal** — from those patterns, generate `K` materially distinct, minimal edits, each tied to a failure mechanism (e.g. disable a model that errors, enable a stronger learner, raise the tuning budget). The proposer uses the configured LLM connector when available and falls back to a deterministic mapping otherwise.
+3. **Proposal Validation** — evaluate each candidate harness on held-in and held-out splits and promote it only under the paper's conservative acceptance rule:
+
+   ```
+   accept iff  Δ_in ≥ 0  and  Δ_ho ≥ 0  and  max(Δ_in, Δ_ho) > 0
+   ```
+
+   An edit that trades one split for another is rejected even if the total pass count rises. Accepted edits are merged (and the merged harness re-verified) before the next round.
+
+Define held-in and held-out cases in JSON:
+
+```json
+{
+  "held_in": [
+    {"name": "iris", "dataset": "iris", "pass_threshold": 0.95},
+    {"name": "wine", "dataset": "wine", "pass_threshold": 0.97}
+  ],
+  "held_out": [
+    {"name": "breast_cancer", "dataset": "breast_cancer", "pass_threshold": 0.98}
+  ]
+}
+```
+
+Cases accept `csv` and `target` instead of `dataset` for your own data. Run the loop:
+
+```bash
+automl-agent self-harness --config examples/self_harness.json \
+  --output artifacts/self_harness --rounds 3 --width 3
+```
+
+Outputs:
+
+- `lineage.json` — the full auditable trail: per-round failure patterns, every proposed edit, its split-wise deltas, and the accept/reject decision.
+- `summary.md` — held-in/held-out pass change, the final harness, and the accepted edits.
+
+The proposer reuses the same LLM backends as the Insight Agent — set `VLLM_BASE_URL` (or `--llm-base-url`), or `RUNPOD_ENDPOINT_ID` + `RUNPOD_API_KEY`, to let a model generate the edits. With no connector configured, the deterministic proposer keeps the loop fully runnable on CPU.
 
 ## CSV Usage
 

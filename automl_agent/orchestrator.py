@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from automl_agent.agents import (
     DataAgent,
@@ -18,12 +18,24 @@ from automl_agent.agents import (
 )
 from automl_agent.types import PipelineReport, TaskType
 
+if TYPE_CHECKING:
+    from automl_agent.self_harness.config import HarnessConfig
+
 
 class AutoMLOrchestrator:
-    def __init__(self, max_workers: int = 4, tuning_trials: int = 20, llm_connector=None) -> None:
+    def __init__(
+        self,
+        max_workers: int = 4,
+        tuning_trials: int = 20,
+        llm_connector=None,
+        harness_config: "Optional[HarnessConfig]" = None,
+    ) -> None:
+        if harness_config is not None:
+            tuning_trials = harness_config.tuning_trials
+        self.harness_config = harness_config
         self.data_agent = DataAgent()
         self.feature_agent = FeatureAgent()
-        self.model_agent = ModelSearchAgent(max_workers=max_workers)
+        self.model_agent = ModelSearchAgent(max_workers=max_workers, config=harness_config)
         self.evaluation_agent = EvaluationAgent()
         self.hyperparameter_agent = HyperparameterAgent(trials=tuning_trials)
         self.explainability_agent = ExplainabilityAgent()
@@ -44,6 +56,11 @@ class AutoMLOrchestrator:
         data = self.data_agent.load(dataset=dataset, csv_path=csv_path, target=target, task_type=task_type)
         feature_plan = self.feature_agent.plan(data)
         candidates = self.model_agent.search(data, feature_plan)
+        failed_candidates = [
+            {"name": result.name, "error": result.error or ""}
+            for result in candidates
+            if result.error is not None
+        ]
         leaderboard = self.evaluation_agent.rank(candidates, data.task_type)
         tuned = self.hyperparameter_agent.tune(leaderboard[0], data, feature_plan)
         final_best = self._choose_final(leaderboard[0], tuned, data.task_type)
@@ -68,6 +85,8 @@ class AutoMLOrchestrator:
             best_model_name=final_best.name,
             best_metrics=final_best.metrics,
             tuned_metrics=tuned.metrics,
+            best_cv_score=final_best.cv_score,
+            failed_candidates=failed_candidates,
             explainability=explainability,
             monitoring_baseline=monitoring_baseline,
             artifact_dir=output_dir,
